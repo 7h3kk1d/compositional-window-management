@@ -51,8 +51,12 @@ export interface SlotMeta {
   grid?: { colSpan: number; rowSpan: number }
   dock?: { side: DockSide; collapsed: boolean }
   document?: { height: number }
-  /** Scrolling tiler: windows sharing a column number stack; width is a fraction of the viewport. Columns may be fractional (to insert between). */
-  scroll?: { column: number; width: number }
+  /**
+   * Scrolling tiler: each child is one column, in the shared order. Width is a
+   * fraction of the visible area. Several windows in one column are a nested
+   * (titleless) vertical split, not a scrolling-specific concept.
+   */
+  scroll?: { width: number }
   kanban?: { lane: string }
   /** Inclusive ISO dates (YYYY-MM-DD). */
   timeline?: { start: string; end: string }
@@ -84,6 +88,8 @@ export interface ViewState {
   outline?: { collapsed: string[] }
   /** Master + stack: the first `count` children share the main area. */
   master?: { ratio: number; count: number }
+  /** Scrolling: keep the focused column centered (niri's center-focused-column). */
+  scroll?: { center: boolean }
   /** Display-only sort; never reorders the shared slot order. */
   table?: { sort: 'title' | 'kind' | null; desc?: boolean }
   kanban?: { lanes: string[] }

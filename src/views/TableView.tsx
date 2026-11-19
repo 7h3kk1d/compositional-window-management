@@ -31,7 +31,7 @@ function formatMeta(view: SlotMetaView, v: SlotMeta[SlotMetaView]): string {
     case 'document':
       return `${r(m.height)}px`
     case 'scroll':
-      return `col ${+m.column.toFixed(2)} · ${Math.round(m.width * 100)}%`
+      return `${Math.round(m.width * 100)}% wide`
     case 'kanban':
       return m.lane
     case 'timeline':

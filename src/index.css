@@ -1122,7 +1122,6 @@ body.pointer-dragging iframe {
   overflow-x: auto;
   overflow-y: hidden;
   container-type: inline-size;
-  scroll-snap-type: x proximity;
 }
 .scroll-strip {
   display: flex;
@@ -1131,21 +1130,21 @@ body.pointer-dragging iframe {
   padding: 6px;
   width: max-content;
 }
+/* centered: room on both sides so the first and last columns can sit in the middle */
+.scroll-view.centered .scroll-strip {
+  padding-inline: 50cqw;
+}
 .scroll-col {
   flex: none;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
   min-width: 160px;
-  scroll-snap-align: start;
 }
-.scroll-cell {
-  flex: 1 1 0;
-  display: flex;
-  min-height: 0;
-}
-.scroll-cell > .frame {
+.scroll-col > .frame {
   flex: 1;
+}
+button.toggle.on {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* ------------------------------------------------------------ master + stack */

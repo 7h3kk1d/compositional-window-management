@@ -13,7 +13,8 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { useEffect, useRef, useState } from 'react'
-import { onGlobalKeyDown, placementFor } from './commands/commands'
+import { placementFor } from './commands/commands'
+import { onGlobalKeyDown } from './commands/keys'
 import { Palette } from './commands/Palette'
 import { resolveDrop, type DragData, type DropData, type DropIntent } from './dnd/resolveDrop'
 import { collectOrphans, getContainer, type Edge, mirror, moveSlot, removeSlot, splitBeside, viewAt } from './model/ops'

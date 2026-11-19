@@ -1,3 +1,4 @@
+import type { Edge } from '../model/ops'
 import type { ViewType } from '../model/types'
 
 export interface ViewInfo {
@@ -6,7 +7,13 @@ export interface ViewInfo {
   blurb: string
   /** Drops are placed where the pointer is (no edge-splitting inside). */
   pointerPlaced?: boolean
+  /** Which edges of a child split it (nesting a split); default all four. */
+  splitEdges?: Edge[]
 }
+
+/** Edges of a child (in a parent shown as `view`) that split it when dropped on. */
+export const splitEdgesIn = (view: ViewType | undefined): Edge[] | undefined =>
+  !view ? undefined : VIEW_INFO[view].pointerPlaced ? [] : VIEW_INFO[view].splitEdges
 
 export const VIEW_INFO: Record<ViewType, ViewInfo> = {
   tabs: { label: 'Tabs', icon: '▭', blurb: 'One child visible at a time, chosen by named tabs' },
@@ -22,7 +29,8 @@ export const VIEW_INFO: Record<ViewType, ViewInfo> = {
     label: 'Scrolling',
     icon: '⇶',
     blurb: 'Scrolling tiler (PaperWM, niri): an endless strip of columns',
-    pointerPlaced: true,
+    // left/right of a column is a new column; top/bottom stacks (a nested split)
+    splitEdges: ['top', 'bottom'],
   },
   master: { label: 'Master + stack', icon: '◨', blurb: 'dwm/xmonad: main windows beside a stack; stores only a ratio' },
   spiral: { label: 'Spiral', icon: '◷', blurb: 'Auto-tiling (bspwm): each window halves the rest; stores nothing' },

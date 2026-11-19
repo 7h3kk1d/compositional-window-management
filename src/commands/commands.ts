@@ -30,6 +30,9 @@ import {
   wrap,
 } from '../model/ops'
 import { seedDoc } from '../model/seed'
+import { KEYMAP } from './keymap'
+import { centerFocused, stackOrExpel, toggleTabs } from './keys'
+import { resizeWindow } from '../model/moves'
 import { startTour } from '../tour/tour'
 import { act, useStore } from '../model/store'
 import { VIEW_TYPES, type Container, type Doc, type Node, type Path, type Slot, type SlotMeta, type ViewType } from '../model/types'
@@ -45,7 +48,6 @@ import {
   kanbanLanes,
   masterState,
   newLaneName,
-  scrollMeta,
   timelineMeta,
 } from '../model/viewMeta'
 
@@ -125,11 +127,7 @@ export function placementFor(c: Container, view: ViewType): SlotMeta {
     const rects = canvasRects({ ...c, slots: [...c.slots, { id: '_', nodeId: '_', meta: {} }] }, 'floating')
     return { floating: rects[rects.length - 1] }
   }
-  if (view === 'scroll') {
-    // a new column at the end of the strip
-    const cols = scrollMeta(c).map((m) => m.column)
-    return { scroll: { column: cols.length ? Math.floor(Math.max(...cols)) + 1 : 0, width: DEFAULT_SCROLL_WIDTH } }
-  }
+  if (view === 'scroll') return { scroll: { width: DEFAULT_SCROLL_WIDTH } }
   if (view === 'kanban') return { kanban: { lane: kanbanLanes(c)[0] } }
   if (view === 'timeline') {
     // right after the last thing on the timeline
@@ -140,23 +138,52 @@ export function placementFor(c: Container, view: ViewType): SlotMeta {
   return {}
 }
 
-const focusTo = (path: Path) => {
+export const focusTo = (path: Path) => {
   act((d) => reveal(d, path))
   useStore.getState().setFocus(path)
 }
 
+/**
+ * Where a new window goes: into the nearest container, right after the
+ * focused window when there is one (a new tab after the current tab, a new
+ * column after the current column…). A window inside a column of a
+ * scrolling strip opens a new column beside that column, as in niri.
+ */
+export function addTarget(ctx: Ctx): { container: Container; path: Path; view: ViewType; index?: number; meta: SlotMeta } {
+  const { doc, container, containerPath, view, slot } = ctx
+  const focusedIsChild = !!slot && ctx.parent === container
+  if (focusedIsChild && view === 'split' && containerPath.length && viewAt(doc, containerPath.slice(0, -1)) === 'scroll') {
+    const gPath = containerPath.slice(0, -1)
+    const g = resolvePath(doc, gPath).nodes.at(-1) as Container
+    const index = g.slots.findIndex((s) => s.id === containerPath.at(-1)) + 1
+    return { container: g, path: gPath, view: 'scroll', index, meta: placementFor(g, 'scroll') }
+  }
+  const meta = placementFor(container, view)
+  if (!focusedIsChild) return { container, path: containerPath, view, meta }
+  // same lane as the focused card
+  if (view === 'kanban' && slot.meta.kanban) meta.kanban = { ...slot.meta.kanban }
+  return { container, path: containerPath, view, meta, index: container.slots.findIndex((s) => s.id === slot.id) + 1 }
+}
+
+export const addNodeFromKeys = (ctx: Ctx) => addNode(ctx, makeLeaf('Note', 'note', { text: '' }))
+
 function addNode(ctx: Ctx, node: Node) {
-  const c = ctx.container
+  const t = addTarget(ctx)
   let sid = ''
   act((d) => {
-    sid = addChild(d, c.id, node, { meta: placementFor(c, ctx.view), parentView: ctx.view })
+    sid = addChild(d, t.container.id, node, { meta: t.meta, index: t.index, parentView: t.view })
   })
-  if (sid) focusTo([...ctx.containerPath, sid])
+  if (sid) focusTo([...t.path, sid])
 }
 
 // ---------------------------------------------------------------- pages
 
 export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] }> = {
+  keys: {
+    title: 'Keyboard shortcuts',
+    items: () =>
+      KEYMAP.map((k, i) => ({ id: 'key-' + i, title: k.what, group: k.group, shortcut: k.keys, run: () => {} })),
+  },
   add: {
     title: 'Add child',
     items: (ctx) => [
@@ -371,6 +398,17 @@ export function rootItems(ctx: Ctx): Item[] {
         run: () => act((d) => setViewState(d, c.id, 'timeline', { dayWidth: Math.min(200, Math.max(12, dayWidthOf(c) * k)) })),
       })
 
+  if (hasParent)
+    items.push(
+      { id: 'stack-left', title: 'Stack with the window before (or leave a stack)', group: 'Layout', shortcut: '⌥[', keywords: ['consume', 'expel', 'column', 'nest'], run: (x) => stackOrExpel(x, -1) },
+      { id: 'stack-right', title: 'Stack with the window after (or leave a stack)', group: 'Layout', shortcut: '⌥]', keywords: ['consume', 'expel', 'column', 'nest'], run: (x) => stackOrExpel(x, 1) },
+      { id: 'grow', title: 'Grow', group: 'Layout', shortcut: '⌥=', keywords: ['resize', 'bigger', 'wider'], run: (x) => act((d) => void resizeWindow(d, x.focus, 1)) },
+      { id: 'shrink', title: 'Shrink', group: 'Layout', shortcut: '⌥-', keywords: ['resize', 'smaller', 'narrower'], run: (x) => act((d) => void resizeWindow(d, x.focus, -1)) },
+      { id: 'center', title: 'Center the focused window', group: 'Layout', shortcut: '⌥C', keywords: ['scroll', 'pan'], run: (x) => centerFocused(x) },
+      { id: 'toggle-tabs', title: 'Toggle tabs for this window’s container', group: 'Layout', shortcut: '⌥T', keywords: ['tabbed', 'column'], run: (x) => toggleTabs(x) },
+    )
+  items.push({ id: 'keys', title: 'Keyboard shortcuts', group: 'Help', page: 'keys', shortcut: '⌥/', keywords: ['keys', 'hotkeys', 'bindings'] })
+
   items.push(
     { id: 'add', title: 'Add child…', group: 'Structure', page: 'add', shortcut: '⌥N note', hint: '→ ' + displayTitle(ctx.doc, c.id) },
   )
@@ -547,85 +585,3 @@ function importDoc() {
 }
 
 // ---------------------------------------------------------------- keyboard
-
-const isEditable = (t: EventTarget | null) =>
-  t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
-
-function siblingFocus(ctx: Ctx, delta: number) {
-  if (!ctx.parent || !ctx.slot) return
-  const i = ctx.parent.slots.findIndex((s) => s.id === ctx.slot!.id)
-  const next = ctx.parent.slots[(i + delta + ctx.parent.slots.length) % ctx.parent.slots.length]
-  if (next) focusTo([...ctx.focus.slice(0, -1), next.id])
-}
-
-function firstChildFocus(ctx: Ctx) {
-  if (ctx.node.type !== 'container' || !ctx.node.slots.length) return
-  const c = ctx.node
-  const s = (ctx.view === 'tabs' && c.slots.find((x) => x.id === c.viewState.tabs?.active)) || c.slots[0]
-  focusTo([...ctx.focus, s.id])
-}
-
-export function onGlobalKeyDown(e: KeyboardEvent) {
-  const st = useStore.getState()
-  const mod = e.metaKey || e.ctrlKey
-  if (mod && e.key.toLowerCase() === 'k') {
-    e.preventDefault()
-    if (st.paletteOpen) st.closePalette()
-    else st.openPalette()
-    return
-  }
-  if (mod && e.key.toLowerCase() === 'p') {
-    e.preventDefault()
-    st.openPalette('goto')
-    return
-  }
-  if (st.paletteOpen) return
-  if (mod && e.key.toLowerCase() === 'z' && !isEditable(e.target)) {
-    e.preventDefault()
-    if (e.shiftKey) st.redo()
-    else st.undo()
-    return
-  }
-  if (!e.altKey || mod) return
-  // keep Alt+arrows for word-wise text navigation inside editors
-  if (isEditable(e.target) && e.code.startsWith('Arrow')) return
-  const ctx = buildCtx()
-  const digit = /^Digit([1-9])$/.exec(e.code)
-  if (digit) {
-    e.preventDefault()
-    const v: ViewType = VIEW_TYPES[Number(digit[1]) - 1]
-    act((d) => setViewAt(d, ctx.containerPath, v))
-    return
-  }
-  const run = (id: string) => rootItems(ctx).find((x) => x.id === id)?.run?.(ctx)
-  const handled = (() => {
-    switch (e.code) {
-      case 'ArrowUp':
-        st.setFocus(ctx.focus.slice(0, -1))
-        return true
-      case 'ArrowDown':
-        firstChildFocus(ctx)
-        return true
-      case 'ArrowLeft':
-        if (e.shiftKey) run('earlier')
-        else siblingFocus(ctx, -1)
-        return true
-      case 'ArrowRight':
-        if (e.shiftKey) run('later')
-        else siblingFocus(ctx, 1)
-        return true
-      case 'KeyN':
-        addNode(ctx, makeLeaf('Note', 'note', { text: '' }))
-        return true
-      case 'KeyW':
-        run('close')
-        return true
-      case 'KeyM':
-        if (ctx.parent) st.openPalette(e.shiftKey ? 'mirror' : 'move')
-        return true
-      default:
-        return false
-    }
-  })()
-  if (handled) e.preventDefault()
-}

@@ -82,29 +82,17 @@ export function documentHeight(slot: Slot) {
 export const SCROLL_WIDTHS = [1 / 3, 1 / 2, 2 / 3, 1]
 export const DEFAULT_SCROLL_WIDTH = 1 / 2
 
-/** Unplaced windows each get a new column after the stored ones. */
-export function scrollMeta(c: Container): { column: number; width: number }[] {
-  const stored = c.slots.map((s) => s.meta.scroll?.column).filter((x): x is number => x !== undefined)
-  let next = stored.length ? Math.floor(Math.max(...stored)) + 1 : 0
-  return c.slots.map((s) => s.meta.scroll ?? { column: next++, width: DEFAULT_SCROLL_WIDTH })
+/** The next preset width up or down from `w` (wrapping around). */
+export function stepWidth(w: number, dir: 1 | -1) {
+  const i = SCROLL_WIDTHS.findIndex((x) => Math.abs(x - w) < 0.01)
+  if (i < 0)
+    return dir > 0 ? (SCROLL_WIDTHS.find((x) => x > w) ?? 1) : ([...SCROLL_WIDTHS].reverse().find((x) => x < w) ?? SCROLL_WIDTHS[0])
+  return SCROLL_WIDTHS[(i + dir + SCROLL_WIDTHS.length) % SCROLL_WIDTHS.length]
 }
 
-export interface ScrollColumn {
-  column: number
-  width: number
-  items: { slot: Slot; index: number }[]
-}
-
-export function scrollColumns(c: Container): ScrollColumn[] {
-  const metas = scrollMeta(c)
-  const byCol = new Map<number, ScrollColumn>()
-  c.slots.forEach((slot, index) => {
-    const m = metas[index]
-    let col = byCol.get(m.column)
-    if (!col) byCol.set(m.column, (col = { column: m.column, width: m.width, items: [] }))
-    col.items.push({ slot, index })
-  })
-  return [...byCol.values()].sort((a, b) => a.column - b.column)
+/** One column per child; unsized columns get the default width. */
+export function scrollMeta(c: Container): { width: number }[] {
+  return c.slots.map((s) => ({ width: s.meta.scroll?.width ?? DEFAULT_SCROLL_WIDTH }))
 }
 
 // ------------------------------------------------------------ master + stack

@@ -1,155 +1,137 @@
 import { useEffect, useRef } from 'react'
-import { getContainer } from '../model/ops'
+import { setSlotMeta, setViewState, stackWith } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
-import type { Container, Doc, NodeId, SlotId } from '../model/types'
-import { SCROLL_WIDTHS, isDerived, scrollColumns, scrollMeta } from '../model/viewMeta'
+import type { Container, Path, Slot } from '../model/types'
+import { DEFAULT_SCROLL_WIDTH, isDerived, stepWidth } from '../model/viewMeta'
 import { Child, useDropAdapter, type ViewProps } from './NodeView'
 
 const FRACTION: Record<string, string> = { '0.333': '⅓', '0.5': '½', '0.667': '⅔', '1': '1' }
-const fractionLabel = (w: number) => FRACTION[String(+w.toFixed(3))] ?? `${Math.round(w * 100)}%`
+export const fractionLabel = (w: number) => FRACTION[String(+w.toFixed(3))] ?? `${Math.round(w * 100)}%`
+export const scrollCentered = (c: Container) => !!c.viewState.scroll?.center
 
-/**
- * Edits in the scrolling tiler first store every window's resolved column
- * (like resizing a split), then apply the change, so derived columns never
- * shift underneath an edit.
- */
-function editScroll(containerId: NodeId, fn: (meta: Map<SlotId, { column: number; width: number }>) => void) {
-  act((d: Doc) => {
-    const c = getContainer(d, containerId)
-    const metas = scrollMeta(c)
-    const map = new Map(c.slots.map((s, i) => [s.id, { ...metas[i] }]))
-    fn(map)
-    for (const s of c.slots) s.meta.scroll = map.get(s.id)!
-  })
+/** Scroll a column into view, or to the middle when the container keeps focus centered. */
+export function scrollToColumn(strip: HTMLElement | null, slotId: string, center: boolean, smooth = true) {
+  const col = strip?.querySelector<HTMLElement>(`:scope > .scroll-strip > [data-scroll-slot="${slotId}"]`)
+  if (!strip || !col) return
+  const behavior = smooth ? 'smooth' : 'auto'
+  if (center) strip.scrollTo({ left: col.offsetLeft + col.offsetWidth / 2 - strip.clientWidth / 2, behavior })
+  else col.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior })
 }
 
 /**
- * Scrolling tiler (PaperWM, niri): an endless horizontal strip of columns.
- * Each column holds one or more stacked windows and has a width that is a
- * fraction of the visible area. Focus scrolls its column into view.
+ * Scrolling tiler (PaperWM, niri): an endless horizontal strip. Every child
+ * is one column, in the shared order, with a width that is a fraction of
+ * the visible area. Several windows in one column are simply a nested
+ * vertical split (⇤ stacks a window into the column on its left), so the
+ * column can be resized, or switched to tabs, like any other container.
+ * Focus scrolls its column into view, or to the middle with "center".
  */
 export function ScrollView({ container, path, depth }: ViewProps) {
   const ref = useRef<HTMLDivElement>(null)
   const key = pathKey(path)
-  const cols = scrollColumns(container)
+  const center = scrollCentered(container)
 
   // the child of this container that holds the focus, if any
   const focusedSlot = useStore((s) =>
     s.focus.length > path.length && path.every((p, i) => s.focus[i] === p) ? s.focus[path.length] : null,
   )
   useEffect(() => {
-    if (!focusedSlot) return
-    const el = ref.current?.querySelector(`[data-scroll-slot="${focusedSlot}"]`)?.closest('.scroll-col')
-    el?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' })
-  }, [focusedSlot])
+    if (focusedSlot) scrollToColumn(ref.current, focusedSlot, center)
+  }, [focusedSlot, center])
 
-  useDropAdapter(path, (x, y) => {
-    const els = Array.from(ref.current?.querySelectorAll<HTMLElement>(`[data-col-in="${key}"]`) ?? [])
-    const between = (a?: number, b?: number) =>
-      a === undefined ? (b ?? 0) - 1 : b === undefined ? Math.floor(a) + 1 : (a + b) / 2
-    for (let i = 0; i < els.length; i++) {
-      const r = els[i].getBoundingClientRect()
-      if (x > r.right) continue
-      const col = cols[i]
-      const fx = (x - r.left) / r.width
-      if (fx < 0.2) return { meta: { scroll: { column: between(cols[i - 1]?.column, col.column), width: col.width } } }
-      if (fx > 0.8) return { meta: { scroll: { column: between(col.column, cols[i + 1]?.column), width: col.width } } }
-      // middle of a column: stack into it, above the window under the pointer
-      const cells = Array.from(els[i].querySelectorAll<HTMLElement>(':scope > .scroll-cell'))
-      const below = cells.findIndex((c) => {
-        const cr = c.getBoundingClientRect()
-        return y < cr.top + cr.height / 2
-      })
-      const index = below >= 0 ? col.items[below].index : col.items[col.items.length - 1].index + 1
-      return { index, meta: { scroll: { column: col.column, width: col.width } } }
-    }
-    return { meta: { scroll: { column: between(cols[cols.length - 1]?.column, undefined), width: SCROLL_WIDTHS[1] } } }
+  // between columns by pointer x
+  useDropAdapter(path, (x) => {
+    const cols = Array.from(ref.current?.querySelectorAll<HTMLElement>(`[data-col-in="${key}"]`) ?? [])
+    const i = cols.findIndex((c) => {
+      const r = c.getBoundingClientRect()
+      return x < r.left + r.width / 2
+    })
+    return { index: i < 0 ? cols.length : i, meta: { scroll: { width: DEFAULT_SCROLL_WIDTH } } }
   })
 
   if (!container.slots.length) return <div className="empty">Empty strip. ⌘K › Add, or drag windows here.</div>
 
   return (
-    <div className="scroll-view" ref={ref}>
+    <div className={`scroll-view ${center ? 'centered' : ''}`} ref={ref}>
       <div className="scroll-strip">
-        {cols.map((col, ci) => (
-          <div
-            key={col.column}
-            className="scroll-col"
-            data-col-in={key}
-            style={{ width: `calc(${col.width * 100}cqw - 8px)` }}
-          >
-            {col.items.map(({ slot }) => (
-              <div key={slot.id} className="scroll-cell" data-scroll-slot={slot.id}>
-                <Child
-                  container={container}
-                  slot={slot}
-                  path={path}
-                  depth={depth}
-                  derived={isDerived(slot, 'scroll')}
-                  headerExtra={<ColumnControls container={container} cols={cols} ci={ci} slotId={slot.id} />}
-                />
-              </div>
-            ))}
-          </div>
+        {container.slots.map((slot, i) => (
+          <Column key={slot.id} container={container} slot={slot} index={i} path={path} depth={depth} k={key} />
         ))}
       </div>
     </div>
   )
 }
 
-function ColumnControls({
+function Column({
   container,
-  cols,
-  ci,
-  slotId,
+  slot,
+  index,
+  path,
+  depth,
+  k,
 }: {
   container: Container
-  cols: ReturnType<typeof scrollColumns>
-  ci: number
-  slotId: SlotId
+  slot: Slot
+  index: number
+  path: Path
+  depth: number
+  k: string
 }) {
-  const col = cols[ci]
-  const nextWidth = SCROLL_WIDTHS[(SCROLL_WIDTHS.findIndex((w) => Math.abs(w - col.width) < 0.01) + 1) % SCROLL_WIDTHS.length]
+  const width = slot.meta.scroll?.width ?? DEFAULT_SCROLL_WIDTH
   return (
-    <>
-      <button
-        className="ghost small"
-        title="Column width (cycles ⅓ ½ ⅔ 1)"
-        onClick={() =>
-          editScroll(container.id, (m) => {
-            for (const it of col.items) m.get(it.slot.id)!.width = nextWidth
-          })
+    <div
+      className="scroll-col"
+      data-col-in={k}
+      data-scroll-slot={slot.id}
+      style={{ width: `calc(${width * 100}cqw - 8px)` }}
+    >
+      <Child
+        container={container}
+        slot={slot}
+        path={path}
+        depth={depth}
+        derived={isDerived(slot, 'scroll')}
+        headerExtra={
+          <>
+            <button
+              className="ghost small"
+              title="Column width (cycles ⅓ ½ ⅔ 1) · ⌥= / ⌥-"
+              onClick={() => act((d) => setSlotMeta(d, container.id, slot.id, 'scroll', { width: stepWidth(width, 1) }))}
+            >
+              ⇔{fractionLabel(width)}
+            </button>
+            {index > 0 && (
+              <button
+                className="ghost small"
+                title="Stack into the column on the left (nests a vertical split) · ⌥["
+                onClick={() => {
+                  let p: Path | null = null
+                  act((d) => {
+                    p = stackWith(d, path, slot.id, -1)
+                  })
+                  if (p) useStore.getState().setFocus(p)
+                }}
+              >
+                ⇤
+              </button>
+            )}
+          </>
         }
-      >
-        ⇔{fractionLabel(col.width)}
-      </button>
-      {ci > 0 && (
-        <button
-          className="ghost small"
-          title="Stack into the column on the left"
-          onClick={() =>
-            editScroll(container.id, (m) => {
-              m.set(slotId, { column: cols[ci - 1].column, width: cols[ci - 1].width })
-            })
-          }
-        >
-          ⇤
-        </button>
-      )}
-      {col.items.length > 1 && (
-        <button
-          className="ghost small"
-          title="Move out into its own column"
-          onClick={() =>
-            editScroll(container.id, (m) => {
-              const next = cols[ci + 1]?.column
-              m.set(slotId, { column: next === undefined ? col.column + 1 : (col.column + next) / 2, width: col.width })
-            })
-          }
-        >
-          ⇥
-        </button>
-      )}
-    </>
+      />
+    </div>
+  )
+}
+
+/** Header toggle for the container itself. */
+export function ScrollControls({ container }: { container: Container }) {
+  const on = scrollCentered(container)
+  return (
+    <button
+      className={`ghost small toggle ${on ? 'on' : ''}`}
+      title={on ? 'Keeping the focused column centered (click to turn off)' : 'Keep the focused column centered'}
+      onClick={() => act((d) => setViewState(d, container.id, 'scroll', { center: !on }))}
+    >
+      ◎ center
+    </button>
   )
 }

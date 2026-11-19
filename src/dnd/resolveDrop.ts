@@ -17,11 +17,11 @@ export interface DragData {
 }
 
 export type DropData =
-  | { kind: 'container'; containerId: NodeId; path: Path; title: string; noSplit?: boolean }
+  | { kind: 'container'; containerId: NodeId; path: Path; title: string; edges?: Edge[] }
   /** A band around the workspace edge: splits the whole desktop. */
   | { kind: 'edge'; edge: Edge; path: Path; title: string }
   /** A leaf window: its edges split it, its middle drops into its parent. */
-  | { kind: 'leaf'; parentId: NodeId; parentPath: Path; path: Path; title: string; noSplit?: boolean }
+  | { kind: 'leaf'; parentId: NodeId; parentPath: Path; path: Path; title: string; edges?: Edge[] }
   | {
       kind: 'tab'
       /** The tabs container that owns this tab. */
@@ -49,7 +49,7 @@ export type DropIntent =
 
 const EDGE_PX = 48
 
-function edgeZone(r: Rect, x: number, y: number): Edge | null {
+function edgeZone(r: Rect, x: number, y: number, allowed?: Edge[]): Edge | null {
   const tx = Math.min(EDGE_PX, r.width * 0.22)
   const ty = Math.min(EDGE_PX, r.height * 0.22)
   const d = [
@@ -58,7 +58,9 @@ function edgeZone(r: Rect, x: number, y: number): Edge | null {
     ['top', y - r.top, ty],
     ['bottom', r.top + r.height - y, ty],
   ] as const
-  const hits = d.filter(([, dist, t]) => dist < t).sort((a, b) => a[1] / a[2] - b[1] / b[2])
+  const hits = d
+    .filter(([e, dist, t]) => dist < t && (!allowed || allowed.includes(e)))
+    .sort((a, b) => a[1] / a[2] - b[1] / b[2])
   return hits[0]?.[0] ?? null
 }
 
@@ -111,7 +113,7 @@ export function resolveDrop(over: DropData, rect: Rect, x: number, y: number): D
       label: 'Reorder',
     }
   }
-  const edge = over.noSplit || overTabBar(x, y) ? null : edgeZone(rect, x, y)
+  const edge = over.edges?.length === 0 || overTabBar(x, y) ? null : edgeZone(rect, x, y, over.edges)
   if (over.kind === 'leaf' && !edge) {
     return {
       kind: 'into',

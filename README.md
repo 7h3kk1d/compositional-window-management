@@ -30,8 +30,10 @@ or ⌘K → "Take the tour". Steps that need demo content your layout lacks are 
   - *Spiral* (bspwm-style auto-tiling) stores nothing: its layout is a pure function of the order.
   - *Master + stack* (dwm/xmonad) stores only a ratio and a count on the container; "make main" reorders the shared
     order, so it changes every other linear view too.
-  - *Scrolling* (PaperWM/niri) stores a column and a width fraction per window. Windows sharing a column stack; columns
-    can be fractional so a drop can land between two without renumbering.
+  - *Scrolling* (PaperWM/niri) stores only a width fraction per column. Each child is one column, in the shared order;
+    several windows in a column are just a nested titleless vertical split (⇤ or ⌥[ stacks, ⌥] unstacks), so they
+    resize, or turn into tabs, like any other container. New windows open beside the focused column, and “◎ center”
+    keeps the focused column in the middle.
   - *Kanban* stores a lane per card, and the lane list on the container. Cards made in other views sit in the first
     lane, marked derived. *Timeline* stores inclusive start/end dates; undated windows are laid end to end after the
     dated ones. (The demo's "Write the post" is mirrored into both, with a lane in one and dates in the other.)
@@ -52,16 +54,28 @@ or ⌘K → "Take the tour". Steps that need demo content your layout lacks are 
 
 ## Keys
 
+The same keys work in every view; each view decides what “move right” or “grow” means in its own terms
+(`src/model/moves.ts`). Press ⌥/ in the app for this list.
+
 | | |
 |---|---|
-| ⌘K | command palette (acts on the focused window) |
-| ⌘P | go to any node |
-| ⌥1–9 | view focused container as tabs/split/canvas/floating/grid/dock/document/outline/json (the rest via ⌘K → "View as") |
-| ⌥↑ ⌥↓ ⌥← ⌥→ | focus parent / first child / siblings |
-| ⌥⇧← ⌥⇧→ | reorder |
-| ⌥N / ⌥W | add note / close |
-| ⌥M / ⌥⇧M | move to… / mirror into… |
-| ⌘Z / ⌘⇧Z | undo / redo |
+| ⌘K | Command palette (acts on the focused window) |
+| ⌘P | Go to any window |
+| ⌘Z / ⌘⇧Z | Undo / redo |
+| ⌥/ | This list |
+| ⌥Esc | Leave a text field (then the keys below work) |
+| ⌥← ⌥→ ⌥↑ ⌥↓ | Focus the window in that direction on screen |
+| ⌥Esc / ⌥↵ | Focus the parent container / go into a container |
+| ⌥, / ⌥. | Previous / next tab (nearest tabs container) |
+| ⌥C | Center the focused window (scrolling strip, canvas, document) |
+| ⌥⇧← ⌥⇧→ ⌥⇧↑ ⌥⇧↓ | Move the window, in its container’s terms; past the end of a tiled container it moves out |
+| ⌥= / ⌥- | Grow / shrink (split share, column width, grid span, canvas size, dates…) |
+| ⌥[ / ⌥] | Stack into the neighbour on the left / right, or out of a stack (nests a split) |
+| ⌥T | Toggle the window’s container between tabs and its previous view |
+| ⌥N | New note, right after the focused window |
+| ⌥W | Close |
+| ⌥M / ⌥⇧M | Move to… / mirror into… |
+| ⌥1 … ⌥9 | View the focused container as tabs, split, canvas, floating, grid, dock, document, outline, JSON |
 
 ## Dragging
 

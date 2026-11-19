@@ -244,7 +244,7 @@ describe('views are per placement', () => {
     const { doc, root, p2 } = mirroredBox()
     const leaf = makeLeaf('z', 'note', { text: '' })
     doc.nodes[leaf.id] = leaf
-    splitBeside(doc, p2, leaf.id, 'left')
+    splitBeside(doc, p2, leaf.id, 'top') // across the parent split's axis, so it nests
     const outer = root.slots.find((s) => s.id === p2[0])!
     expect(outer.view).toBe('split')
     const split = getContainer(doc, outer.nodeId)

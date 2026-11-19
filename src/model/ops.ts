@@ -413,8 +413,31 @@ export function splitBeside(
   if (slots.length !== targetPath.length) return null
   const target = nodes[nodes.length - 1]
   if (wouldCycle(doc, target.id, nodeId)) return null
+  const axis = edge === 'left' || edge === 'right' ? 'row' : 'column'
+  // Already inside a split along the same axis: become a sibling there
+  // instead of nesting another split (keeps trees flat, like i3).
+  const parentPath = targetPath.slice(0, -1)
+  const parent = nodes[nodes.length - 2]
+  if (
+    parent?.type === 'container' &&
+    viewAt(doc, parentPath) === 'split' &&
+    (parent.viewState.split?.direction ?? 'row') === axis
+  ) {
+    if (wouldCycle(doc, parent.id, nodeId)) return null
+    const tSlot = slots[slots.length - 1]
+    const size = tSlot.meta.split?.size
+    if (size !== undefined) tSlot.meta.split = { size: size / 2 }
+    const index = parent.slots.indexOf(tSlot) + (edge === 'right' || edge === 'bottom' ? 1 : 0)
+    const sid = insertRef(doc, parent.id, nodeId, {
+      index,
+      view,
+      meta: size !== undefined ? { split: { size: size / 2 } } : {},
+      parentView: 'split',
+    })
+    return sid ? [...parentPath, sid] : null
+  }
   const split = makeContainer('', 'split', {
-    split: { direction: edge === 'left' || edge === 'right' ? 'row' : 'column' },
+    split: { direction: axis },
   })
   // the target keeps the view it had at this position
   const targetSlot: Slot = { id: newId('s'), nodeId: target.id, meta: { split: { size: 1 } } }
@@ -475,4 +498,83 @@ export function setKanbanLanes(doc: Doc, containerId: NodeId, fn: (lanes: string
   const c = getContainer(doc, containerId)
   c.viewState.kanban = { lanes: fn(kanbanLanes(c)) }
   if (rename) for (const s of c.slots) if (s.meta.kanban?.lane === rename[0]) s.meta.kanban = { lane: rename[1] }
+}
+
+/**
+ * Stack a child together with its neighbour (dir -1: the one before, +1:
+ * the one after) by nesting them in a titleless split, or by joining the
+ * neighbour if it already is such a split along `direction`. This is how a
+ * scrolling container gets several windows in one column. Returns the new
+ * path of the moved child.
+ */
+export function stackWith(
+  doc: Doc,
+  parentPath: Path,
+  slotId: SlotId,
+  dir: -1 | 1,
+  direction: 'row' | 'column' = 'column',
+): Path | null {
+  const parent = resolvePath(doc, parentPath).nodes.at(-1)
+  if (parent?.type !== 'container') return null
+  const i = parent.slots.findIndex((s) => s.id === slotId)
+  const nb = parent.slots[i + dir]
+  if (i < 0 || !nb) return null
+  const nbNode = getNode(doc, nb.nodeId)
+  let colId: NodeId
+  if (
+    nbNode.type === 'container' &&
+    !nbNode.title &&
+    slotView(doc, nb) === 'split' &&
+    (nbNode.viewState.split?.direction ?? 'row') === direction
+  ) {
+    colId = nbNode.id
+  } else {
+    // a fresh wrapper can't create a cycle: the moved child is a sibling
+    colId = wrap(doc, parent.id, nb.id, 'split')
+    getContainer(doc, colId).viewState.split = { direction }
+  }
+  const col = getContainer(doc, colId)
+  const moved = moveSlot(doc, parent.id, slotId, colId, { index: dir < 0 ? col.slots.length : 0, parentView: 'split' })
+  return moved ? [...parentPath, nb.id, moved] : null
+}
+
+/**
+ * Move the child at `path` out of its parent into the grandparent, right
+ * before (dir -1) or after (dir +1) the parent. It takes a copy of the
+ * parent's layout there. A titleless parent left with one child dissolves
+ * into that child; one left empty is removed.
+ */
+export function liftOut(doc: Doc, path: Path, dir: -1 | 1): Path | null {
+  if (path.length < 2) return null
+  const { nodes, slots } = resolvePath(doc, path)
+  if (slots.length !== path.length) return null
+  const gPath = path.slice(0, -2)
+  const g = nodes[nodes.length - 3] as Container
+  const p = nodes[nodes.length - 2] as Container
+  const pSlot = slots[slots.length - 2]
+  const slot = slots[slots.length - 1]
+  if (wouldCycle(doc, g.id, slot.nodeId)) return null
+  const meta = clone(pSlot.meta)
+  for (const k of ['canvas', 'floating'] as const) {
+    const r = meta[k]
+    if (r) meta[k] = { ...r, x: r.x + 32, y: r.y + 32, z: r.z + 1 }
+  }
+  const index = g.slots.indexOf(pSlot) + (dir > 0 ? 1 : 0)
+  const view = slot.view
+  p.slots.splice(p.slots.indexOf(slot), 1)
+  const sid = insertRef(doc, g.id, slot.nodeId, { index, meta, view, parentView: viewAt(doc, gPath) })
+  if (!sid) return null
+  if (!p.title && refCount(doc, p.id) === 1) {
+    if (p.slots.length === 0) {
+      g.slots.splice(g.slots.indexOf(pSlot), 1)
+      delete doc.nodes[p.id]
+    } else if (p.slots.length === 1) {
+      const only = p.slots[0]
+      pSlot.nodeId = only.nodeId
+      if (only.view) pSlot.view = only.view
+      else delete pSlot.view
+      delete doc.nodes[p.id]
+    }
+  }
+  return [...gPath, sid]
 }

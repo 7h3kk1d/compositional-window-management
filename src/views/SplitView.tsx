@@ -1,8 +1,9 @@
 import { Fragment, useRef } from 'react'
 import { indexFromPoint } from '../dnd/dropAdapters'
-import { getContainer } from '../model/ops'
+import { getContainer, setViewState } from '../model/ops'
 import { act, pathKey } from '../model/store'
 import { isDerived, splitSizes } from '../model/viewMeta'
+import type { Container } from '../model/types'
 import { Child, startPointerDrag, useDropAdapter, type ViewProps } from './NodeView'
 
 export function SplitView({ container, path, depth }: ViewProps) {
@@ -50,5 +51,19 @@ export function SplitView({ container, path, depth }: ViewProps) {
         </Fragment>
       ))}
     </div>
+  )
+}
+
+/** Header toggle: side by side ↔ stacked. */
+export function SplitControls({ container }: { container: Container }) {
+  const dir = container.viewState.split?.direction ?? 'row'
+  return (
+    <button
+      className="ghost small"
+      title={dir === 'row' ? 'Side by side (click to stack)' : 'Stacked (click to put side by side)'}
+      onClick={() => act((d) => setViewState(d, container.id, 'split', { direction: dir === 'row' ? 'column' : 'row' }))}
+    >
+      {dir === 'row' ? '⇆' : '⇅'}
+    </button>
   )
 }

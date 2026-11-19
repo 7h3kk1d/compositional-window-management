@@ -166,7 +166,8 @@ function steps(): Step[] {
     {
       title: 'Your turn',
       body:
-        `Click a container and press ${kbd('⌥1')}–${kbd('⌥9')} to flip through views, or ${kbd('⌘K')} → “View as Table” to see every view’s stored layout side by side.<br><br>` +
+        `Click a container and press ${kbd('⌥1')}–${kbd('⌥9')} to flip through views, or ${kbd('⌘K')} → “View as Table” to see every view’s stored layout side by side. ` +
+        `Everything works from the keyboard too: ${kbd('⌥')} + arrows moves focus, ${kbd('⌥/')} lists every shortcut.<br><br>` +
         'Replay this tour any time with the <b>?</b> button or ⌘K → “Take the tour”.',
       before: show('Work'),
     },

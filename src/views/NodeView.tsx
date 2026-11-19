@@ -3,12 +3,12 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { contentKind } from '../content/registry'
 import { dropAdapters, type DropAdapter } from '../dnd/dropAdapters'
 import type { DropData } from '../dnd/resolveDrop'
-import { refCounts, removeSlot, rename, setLeafData, setViewAt, viewAt } from '../model/ops'
+import { refCounts, removeSlot, rename, setLeafData, setViewAt, viewAt, type Edge } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
 import { VIEW_TYPES, type Container, type Leaf, type NodeId, type Path, type Slot, type ViewType } from '../model/types'
 import { displayTitle, isAutoTitled } from '../model/titles'
-import { VIEW_INFO } from './viewInfo'
-import { VIEW_COMPONENTS } from './registry'
+import { VIEW_INFO, splitEdgesIn } from './viewInfo'
+import { VIEW_COMPONENTS, VIEW_CONTROLS } from './registry'
 
 export const MAX_DEPTH = 24
 
@@ -65,10 +65,8 @@ function Frame({
 
   // Inside a parent that places by pointer (canvas, kanban, timeline…)
   // dropping on a window just places it there; no edge-splitting.
-  const inSpatial = useStore((s) => {
-    if (!parentId) return false
-    return !!VIEW_INFO[viewAt(s.doc, path.slice(0, -1))].pointerPlaced
-  })
+  const parentView = useStore((s) => (parentId ? viewAt(s.doc, path.slice(0, -1)) : undefined))
+  const edges = splitEdgesIn(parentView)
   // how *this placement* shows the container (views are per reference)
   const view: ViewType | undefined = node.type === 'container' ? (slot?.view ?? node.defaultView) : undefined
   const leafDrop = useDroppable({
@@ -80,7 +78,7 @@ function Frame({
       parentPath: path.slice(0, -1),
       path,
       title: displayTitle(useStore.getState().doc, node.id, { view }),
-      noSplit: inSpatial,
+      edges,
     } satisfies DropData,
   })
 
@@ -99,6 +97,7 @@ function Frame({
       } ${drag.isDragging ? 'dragging' : ''} ${className}`}
       style={style}
       data-node={node.id}
+      data-path={key}
       onPointerDownCapture={() => setFocus(path)}
     >
       {!bare && (
@@ -144,7 +143,7 @@ function Frame({
         {node.type === 'leaf' ? (
           <LeafBody leaf={node} />
         ) : (
-          <ContainerBody container={node} path={path} depth={depth} noSplit={inSpatial} view={view ?? node.defaultView} />
+          <ContainerBody container={node} path={path} depth={depth} edges={edges} view={view ?? node.defaultView} />
         )}
       </div>
     </section>
@@ -175,6 +174,7 @@ export function FrameControls({ node, path, view }: { node: Leaf | Container; pa
   const setFocus = useStore.getState().setFocus
   return (
     <>
+      {node.type === 'container' && <ViewControls container={node} path={path} view={view ?? node.defaultView} />}
       {node.type === 'container' && <ViewSelect path={path} view={view ?? node.defaultView} mirrored={mirrored} />}
       {node.type === 'container' && (
         <button
@@ -200,6 +200,11 @@ export function FrameControls({ node, path, view }: { node: Leaf | Container; pa
       </button>
     </>
   )
+}
+
+function ViewControls({ container, path, view }: { container: Container; path: Path; view: ViewType }) {
+  const C = VIEW_CONTROLS[view]
+  return C ? <C container={container} path={path} /> : null
 }
 
 /**
@@ -285,9 +290,9 @@ function ContainerBody({
   container,
   path,
   depth,
-  noSplit,
+  edges,
   view,
-}: ViewProps & { noSplit: boolean; view: ViewType }) {
+}: ViewProps & { edges?: Edge[]; view: ViewType }) {
   const key = pathKey(path)
   const drop = useDroppable({
     id: 'drop:' + key,
@@ -296,7 +301,7 @@ function ContainerBody({
       containerId: container.id,
       path,
       title: displayTitle(useStore.getState().doc, container.id, { view }),
-      noSplit,
+      edges,
     } satisfies DropData,
   })
   const View = VIEW_COMPONENTS[view]
