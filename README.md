@@ -1,6 +1,7 @@
 # Compositional WM
 
 A webapp illustrating [On Compositional Window Management](https://bandukwala.me/on-compositional-window-management/).
+Try it at <https://bandukwala.me/compositional-window-management/>.
 The content is one DAG of nodes. Every container is a *view* of its children, and any container can switch views in place:
 tabs, split, canvas, floating, grid, dock, document, outline, JSON, scrolling, master + stack, spiral, table, kanban,
 or timeline.
