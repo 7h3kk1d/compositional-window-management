@@ -23,7 +23,16 @@ npm test        # model tests (lens round-trips, mirroring, cycles)
   one, shown dashed with a "derived" badge (`src/model/viewMeta.ts`), until you move it or run "Materialize".
 - **Pure ops** (`src/model/ops.ts`) are used by the palette, keyboard and buttons through one command registry
   (`src/commands/commands.ts`).
-- **Pluggable content** (`src/content/registry.tsx`): note, web page, pane, clock, todo, image.
+- **Pluggable content** (`src/content/registry.tsx`): note, embed, HTML widget, pane, clock, todo, image.
+  - **Embeds** (`src/content/embeds.ts`): paste an ordinary share link and known sites become their embeddable player
+    (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Observable, Figma, Google Maps, OpenStreetMap, Desmos, StackBlitz,
+    CodeSandbox, Loom, gists, Excalidraw, tldraw, Wikipedia). Pure URL rewriting, no API keys. The pasted link is what's
+    stored, so better recipes upgrade old windows. Sites that refuse framing (GitHub, X, …) show an "open" link instead.
+  - **HTML widgets** (`src/content/htmlWidget.tsx`): HTML/JS in a sandboxed iframe with a tiny bridge
+    (`cwm.state`, `cwm.setState`, `cwm.onState`, `cwm.onTheme`). The code and the state live in the document, so
+    widget state persists, undoes, and stays in sync across mirrors (the demo Sketchpad is mirrored into Play and
+    Social). Templates: Sketchpad, Counter, Timer, Markdown (loads a library from a CDN), Blank. Hover a widget and
+    click `</>` to edit its code; ⌘↵ runs it.
 
 ## Keys
 

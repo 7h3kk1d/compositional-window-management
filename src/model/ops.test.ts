@@ -290,7 +290,7 @@ describe('seed', () => {
   it('builds a valid doc with a mirrored note and a mirrored container', () => {
     const doc = seedDoc()
     const mirrored = Object.values(doc.nodes).filter((n) => refCount(doc, n.id) > 1)
-    expect(mirrored.map((n) => n.title).sort()).toEqual(['Ideas (mirrored)', 'Projects'])
+    expect(mirrored.map((n) => n.title).sort()).toEqual(['Ideas (mirrored)', 'Projects', 'Sketchpad'])
     expect(collectOrphans(doc)).toEqual([])
   })
 })

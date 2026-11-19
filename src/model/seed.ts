@@ -1,3 +1,5 @@
+import { EMBED_EXAMPLES } from '../content/embeds'
+import { WIDGET_TEMPLATES } from '../content/htmlWidget'
 import { addChild, makeContainer, makeLeaf, mirror } from './ops'
 import type { Doc } from './types'
 
@@ -103,6 +105,11 @@ export function seedDoc(): Doc {
     meta: { canvas: { x: 1020, y: 0, w: 300, h: 420, z: 4 } },
   })
 
+  // An HTML widget: its state lives in the document, so the mirrored copy in
+  // Social shows the same drawing.
+  const sketchpad = makeLeaf('Sketchpad', 'widget', WIDGET_TEMPLATES.find((t) => t.id === 'sketch')!.data())
+  addChild(doc, play.id, sketchpad, { meta: { canvas: { x: 0, y: 420, w: 520, h: 320, z: 5 } } })
+
   // --- Social: a document (timeline-ish)
   const social = makeContainer('Social', 'document')
   addChild(doc, root.id, social)
@@ -117,6 +124,10 @@ export function seedDoc(): Doc {
     meta: { document: { height: 120 } },
   })
   addChild(doc, social.id, makeLeaf('Reply', 'note', { text: 'Window management should be compositional.' }))
+  addChild(doc, social.id, makeLeaf('The Mother of All Demos', 'iframe', { url: EMBED_EXAMPLES[0].url }), {
+    meta: { document: { height: 320 } },
+  })
+  mirror(doc, sketchpad.id, social.id, { meta: { document: { height: 280 } } })
 
   root.viewState.tabs = { active: workSlot }
   return doc

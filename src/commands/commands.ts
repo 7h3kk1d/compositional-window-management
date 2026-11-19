@@ -137,6 +137,15 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
         group: 'Content',
         run: () => addNode(ctx, makeLeaf(k.label, k.id, k.create())),
       })),
+      ...CONTENT_KINDS.flatMap((k) =>
+        (k.presets ?? []).map((p) => ({
+          id: `add-${k.id}-${p.id}`,
+          title: `${k.icon}  ${p.label}`,
+          group: k.label,
+          keywords: [k.label],
+          run: () => addNode(ctx, makeLeaf(p.label, k.id, p.data())),
+        })),
+      ),
       ...VIEW_TYPES.map((v) => ({
         id: 'add-c-' + v,
         title: `${VIEW_INFO[v].icon}  ${VIEW_INFO[v].label} container`,

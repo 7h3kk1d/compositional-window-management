@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type FC } from 'react'
+import { useEffect, useMemo, useRef, useState, type FC } from 'react'
+import { EMBED_EXAMPLES, normalizeUrl, resolveEmbed } from './embeds'
+import { HtmlWidget, WIDGET_TEMPLATES } from './htmlWidget'
 
 export interface ContentProps<D> {
   data: D
@@ -13,6 +15,8 @@ export interface ContentKind<D = any> {
   Render: FC<ContentProps<D>>
   /** Rendered as flowing text (no frame) in document view. */
   inline?: boolean
+  /** Ready-made starting points, listed separately in "Add child". */
+  presets?: { id: string; label: string; data: () => D }[]
 }
 
 // ------------------------------------------------------------ note
@@ -55,37 +59,71 @@ export function InlineNote({ data, update }: ContentProps<NoteData>) {
   )
 }
 
-// ------------------------------------------------------------ iframe
+// ------------------------------------------------------------ embed / web page
 
 interface IframeData {
   url: string
 }
 
-function Iframe({ data, update }: ContentProps<IframeData>) {
+/** Any URL; known sites (YouTube, Spotify, Figma, maps, …) become their embeddable player. */
+function Embed({ data, update }: ContentProps<IframeData>) {
   const [draft, setDraft] = useState(data.url)
   useEffect(() => setDraft(data.url), [data.url])
+  const embed = useMemo(() => (data.url ? resolveEmbed(data.url) : null), [data.url])
   return (
     <div className="iframe-kind">
       <form
         className="urlbar"
         onSubmit={(e) => {
           e.preventDefault()
-          let url = draft.trim()
-          if (url && !/^https?:\/\//.test(url)) url = 'https://' + url
-          update({ url })
+          update({ url: normalizeUrl(draft) })
         }}
       >
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="https://…" />
-      </form>
-      {data.url ? (
-        <iframe
-          src={data.url}
-          title={data.url}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          referrerPolicy="no-referrer"
+        {embed?.provider && <span className="embed-provider">{embed.provider}</span>}
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => draft !== data.url && update({ url: normalizeUrl(draft) })}
+          placeholder="Paste a link or embed code…"
         />
+        {data.url && (
+          <a className="urlbar-open" href={normalizeUrl(data.url)} target="_blank" rel="noreferrer" title="Open in a new tab">
+            ↗
+          </a>
+        )}
+      </form>
+      {!embed ? (
+        <div className="embed-empty">
+          <div className="muted">Paste any link. These sites become embedded players:</div>
+          <div className="embed-examples">
+            {EMBED_EXAMPLES.map((x) => (
+              <button key={x.url} onClick={() => update({ url: x.url })}>
+                {x.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : embed.blocked ? (
+        <div className="empty">
+          This site doesn’t allow embedding.{' '}
+          <a href={embed.src} target="_blank" rel="noreferrer">
+            Open it in a new tab ↗
+          </a>
+        </div>
       ) : (
-        <div className="empty">Enter a URL. Some sites refuse to be embedded.</div>
+        <iframe
+          key={embed.src ?? 'doc'}
+          src={embed.src}
+          srcDoc={embed.srcdoc}
+          title={data.url}
+          sandbox={
+            embed.srcdoc
+              ? 'allow-scripts allow-popups'
+              : 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-popups-to-escape-sandbox'
+          }
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write"
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
       )}
     </div>
   )
@@ -199,7 +237,22 @@ function Image({ data, update }: ContentProps<ImageData>) {
 
 export const CONTENT_KINDS: ContentKind[] = [
   { id: 'note', label: 'Note', icon: '✎', create: () => ({ text: '' }), Render: Note, inline: true },
-  { id: 'iframe', label: 'Web page', icon: '◎', create: () => ({ url: '' }), Render: Iframe },
+  {
+    id: 'iframe',
+    label: 'Embed / web page',
+    icon: '◎',
+    create: () => ({ url: '' }),
+    Render: Embed,
+    presets: EMBED_EXAMPLES.map((x) => ({ id: x.label, label: x.label, data: () => ({ url: x.url }) })),
+  },
+  {
+    id: 'widget',
+    label: 'HTML widget',
+    icon: '⌬',
+    create: WIDGET_TEMPLATES[0].data,
+    Render: HtmlWidget,
+    presets: WIDGET_TEMPLATES.map((t) => ({ id: t.id, label: t.label, data: t.data })),
+  },
   {
     id: 'placeholder',
     label: 'Pane',
