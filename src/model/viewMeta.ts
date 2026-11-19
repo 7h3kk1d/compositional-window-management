@@ -77,6 +77,89 @@ export function documentHeight(slot: Slot) {
   return slot.meta.document?.height ?? 280
 }
 
+// ------------------------------------------------------------ scrolling tiler
+
+export const SCROLL_WIDTHS = [1 / 3, 1 / 2, 2 / 3, 1]
+export const DEFAULT_SCROLL_WIDTH = 1 / 2
+
+/** Unplaced windows each get a new column after the stored ones. */
+export function scrollMeta(c: Container): { column: number; width: number }[] {
+  const stored = c.slots.map((s) => s.meta.scroll?.column).filter((x): x is number => x !== undefined)
+  let next = stored.length ? Math.floor(Math.max(...stored)) + 1 : 0
+  return c.slots.map((s) => s.meta.scroll ?? { column: next++, width: DEFAULT_SCROLL_WIDTH })
+}
+
+export interface ScrollColumn {
+  column: number
+  width: number
+  items: { slot: Slot; index: number }[]
+}
+
+export function scrollColumns(c: Container): ScrollColumn[] {
+  const metas = scrollMeta(c)
+  const byCol = new Map<number, ScrollColumn>()
+  c.slots.forEach((slot, index) => {
+    const m = metas[index]
+    let col = byCol.get(m.column)
+    if (!col) byCol.set(m.column, (col = { column: m.column, width: m.width, items: [] }))
+    col.items.push({ slot, index })
+  })
+  return [...byCol.values()].sort((a, b) => a.column - b.column)
+}
+
+// ------------------------------------------------------------ master + stack
+
+export const masterState = (c: Container) => c.viewState.master ?? { ratio: 0.6, count: 1 }
+
+// ------------------------------------------------------------ kanban
+
+export const DEFAULT_LANES = ['To do', 'Doing', 'Done']
+
+/** The lane list, plus any lane a child still names (data is never hidden). */
+export function kanbanLanes(c: Container): string[] {
+  const lanes = [...(c.viewState.kanban?.lanes ?? DEFAULT_LANES)]
+  for (const s of c.slots) {
+    const l = s.meta.kanban?.lane
+    if (l !== undefined && !lanes.includes(l)) lanes.push(l)
+  }
+  return lanes
+}
+
+export function newLaneName(c: Container) {
+  const lanes = kanbanLanes(c)
+  let n = lanes.length + 1
+  while (lanes.includes(`Lane ${n}`)) n++
+  return `Lane ${n}`
+}
+
+/** Unplaced cards start in the first lane. */
+export function kanbanMeta(c: Container): { lane: string }[] {
+  const first = kanbanLanes(c)[0] ?? DEFAULT_LANES[0]
+  return c.slots.map((s) => s.meta.kanban ?? { lane: first })
+}
+
+// ------------------------------------------------------------ timeline
+
+const DAY = 86_400_000
+export const dayNum = (iso: string) => Math.floor(Date.parse(iso + 'T00:00:00Z') / DAY)
+export const dayIso = (n: number) => new Date(n * DAY).toISOString().slice(0, 10)
+export const todayNum = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60_000) / DAY)
+export const DERIVED_SPAN_DAYS = 3
+export const DEFAULT_DAY_WIDTH = 80
+export const dayWidthOf = (c: Container) => c.viewState.timeline?.dayWidth ?? DEFAULT_DAY_WIDTH
+
+/** Undated windows are laid end to end after the dated ones (or from today). */
+export function timelineMeta(c: Container): { start: string; end: string }[] {
+  const ends = c.slots.map((s) => s.meta.timeline?.end).filter((x): x is string => !!x)
+  let cursor = ends.length ? Math.max(...ends.map(dayNum)) + 1 : todayNum()
+  return c.slots.map((s) => {
+    if (s.meta.timeline) return s.meta.timeline
+    const start = cursor
+    cursor += DERIVED_SPAN_DAYS
+    return { start: dayIso(start), end: dayIso(start + DERIVED_SPAN_DAYS - 1) }
+  })
+}
+
 /** The value a view would render for each slot, stored or derived. */
 export function resolvedMeta(c: Container, view: SlotMetaView): SlotMeta[SlotMetaView][] {
   switch (view) {
@@ -91,5 +174,11 @@ export function resolvedMeta(c: Container, view: SlotMetaView): SlotMeta[SlotMet
       return c.slots.map(dockMeta)
     case 'document':
       return c.slots.map((s) => ({ height: documentHeight(s) }))
+    case 'scroll':
+      return scrollMeta(c)
+    case 'kanban':
+      return kanbanMeta(c)
+    case 'timeline':
+      return timelineMeta(c)
   }
 }

@@ -9,6 +9,12 @@ import { DockView } from './DockView'
 import { DocumentView } from './DocumentView'
 import { OutlineView } from './OutlineView'
 import { JsonView } from './JsonView'
+import { ScrollView } from './ScrollView'
+import { MasterView } from './MasterView'
+import { SpiralView } from './SpiralView'
+import { TableView } from './TableView'
+import { KanbanView } from './KanbanView'
+import { TimelineView } from './TimelineView'
 
 export const VIEW_COMPONENTS: Record<ViewType, FC<ViewProps>> = {
   tabs: TabsView,
@@ -20,4 +26,10 @@ export const VIEW_COMPONENTS: Record<ViewType, FC<ViewProps>> = {
   document: DocumentView,
   outline: OutlineView,
   json: JsonView,
+  scroll: ScrollView,
+  master: MasterView,
+  spiral: SpiralView,
+  table: TableView,
+  kanban: KanbanView,
+  timeline: TimelineView,
 }

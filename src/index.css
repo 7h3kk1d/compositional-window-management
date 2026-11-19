@@ -1114,3 +1114,317 @@ body.pointer-dragging iframe {
   right: 26px;
   height: 20px;
 }
+
+/* ------------------------------------------------------------ scrolling tiler */
+.scroll-view {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  container-type: inline-size;
+  scroll-snap-type: x proximity;
+}
+.scroll-strip {
+  display: flex;
+  height: 100%;
+  gap: 8px;
+  padding: 6px;
+  width: max-content;
+}
+.scroll-col {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+  scroll-snap-align: start;
+}
+.scroll-cell {
+  flex: 1 1 0;
+  display: flex;
+  min-height: 0;
+}
+.scroll-cell > .frame {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------ master + stack */
+.master-view {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  padding: 6px;
+}
+.master-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+.master-area.main {
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+.master-area.stack {
+  flex: 1;
+}
+.master-cell {
+  flex: 1 1 0;
+  display: flex;
+  min-height: 0;
+}
+.master-cell > .frame {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------ spiral */
+.spiral-view {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  padding: 6px;
+}
+.spiral-pair,
+.spiral-rest,
+.spiral-cell {
+  flex: 1 1 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  gap: 6px;
+}
+.spiral-cell > .frame {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------ table */
+.table-view {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+.table-view table {
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.table-view th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  text-align: left;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.table-view th.sortable {
+  cursor: pointer;
+}
+.table-view th.unused {
+  color: var(--muted);
+  font-weight: 500;
+}
+.table-view td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.table-view tbody tr {
+  cursor: default;
+}
+.table-view tbody tr:hover {
+  background: var(--surface-2);
+}
+.table-view tbody tr.focused {
+  background: var(--accent-soft);
+}
+.table-view tr.dragging {
+  opacity: 0.4;
+}
+.table-view .title-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 160px;
+}
+.table-view .grip {
+  cursor: grab;
+  color: var(--muted);
+}
+.meta-cell {
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: text;
+}
+.meta-cell.derived {
+  color: var(--muted);
+  font-style: italic;
+  opacity: 0.75;
+}
+.meta-cell.editing input {
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 260px;
+  padding: 2px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--surface);
+  outline: none;
+}
+.meta-cell.editing input.error {
+  border-color: #e5484d;
+}
+
+/* ------------------------------------------------------------ kanban */
+.kanban-view {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  min-height: 0;
+  overflow-x: auto;
+  align-items: stretch;
+}
+.kanban-lane {
+  flex: 1 0 230px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+.kanban-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-weight: 600;
+}
+.kanban-lane-head .count {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+}
+.kanban-lane-head .spacer {
+  flex: 1;
+}
+.lane-name {
+  cursor: text;
+}
+.kanban-cards {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+.kanban-card {
+  flex: none;
+  height: 190px;
+  display: flex;
+}
+.kanban-card > .frame {
+  flex: 1;
+}
+.kanban-empty {
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  text-align: center;
+  font-size: 12px;
+}
+.kanban-add-lane {
+  flex: none;
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px dashed var(--border) !important;
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------ timeline */
+.timeline-view {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  position: relative;
+}
+.tl-canvas {
+  position: relative;
+  min-height: 100%;
+}
+.tl-days {
+  position: absolute;
+  inset: 0;
+}
+.tl-day {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.tl-day.weekend {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+.tl-day.month-start {
+  border-left-color: var(--muted);
+}
+.tl-label,
+.tl-month {
+  position: absolute;
+  top: 20px;
+  left: 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tl-month {
+  top: 4px;
+  font-weight: 600;
+  color: var(--text);
+}
+.tl-day.today .tl-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tl-now {
+  position: absolute;
+  top: 36px;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.tl-item {
+  position: absolute;
+  display: flex;
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+}
+.tl-item > .frame {
+  flex: 1;
+}
+.tl-item > .frame > .frame-header {
+  cursor: ew-resize;
+}
+.tl-dates {
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.tl-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+}
+.tl-resize:hover {
+  background: var(--accent-soft);
+}

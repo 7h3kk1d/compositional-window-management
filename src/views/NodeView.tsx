@@ -63,12 +63,11 @@ function Frame({
   const refs = useStore((s) => refCounts(s.doc).get(node.id) ?? 0)
   const setFocus = useStore((s) => s.setFocus)
 
-  // Inside a spatial parent (canvas/floating) dropping on a window just
-  // places beside it; edge-splitting only applies in tiled layouts.
+  // Inside a parent that places by pointer (canvas, kanban, timeline…)
+  // dropping on a window just places it there; no edge-splitting.
   const inSpatial = useStore((s) => {
     if (!parentId) return false
-    const pv = viewAt(s.doc, path.slice(0, -1))
-    return pv === 'canvas' || pv === 'floating'
+    return !!VIEW_INFO[viewAt(s.doc, path.slice(0, -1))].pointerPlaced
   })
   // how *this placement* shows the container (views are per reference)
   const view: ViewType | undefined = node.type === 'container' ? (slot?.view ?? node.defaultView) : undefined

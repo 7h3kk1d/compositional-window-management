@@ -2,6 +2,7 @@ import { EMBED_EXAMPLES } from '../content/embeds'
 import { WIDGET_TEMPLATES } from '../content/htmlWidget'
 import { addChild, makeContainer, makeLeaf, mirror } from './ops'
 import type { Doc } from './types'
+import { dayIso, todayNum } from './viewMeta'
 
 /**
  * A demo document following the essay's examples: a tabbed top level with
@@ -75,6 +76,31 @@ export function seedDoc(): Doc {
   addChild(doc, beta.id, makeLeaf('Mood', 'placeholder', { color: '#f2b84b', label: 'Exploring' }), {
     meta: { document: { height: 140 } },
   })
+  // A kanban board and a timeline over the same work: the "Write the post"
+  // card is mirrored into both, with a lane in one and dates in the other.
+  const board = makeContainer('Board', 'kanban', { kanban: { lanes: ['To do', 'Doing', 'Done'] } })
+  addChild(doc, tracker.id, board)
+  const post = makeLeaf('Write the post', 'note', { text: 'Draft "On compositional persistence".' })
+  addChild(doc, board.id, post, { meta: { kanban: { lane: 'Doing' } } })
+  addChild(doc, board.id, makeLeaf('Container API', 'placeholder', { color: '#46c2a5', label: 'Shipped' }), {
+    meta: { kanban: { lane: 'Done' } },
+  })
+  addChild(doc, board.id, makeLeaf('Marketplace', 'note', { text: 'A marketplace of containers people can install.' }), {
+    meta: { kanban: { lane: 'To do' } },
+  })
+  // no lane stored: the board derives one (first lane) and marks it
+  addChild(doc, board.id, makeLeaf('Inbox idea', 'note', { text: 'Made in another view, so it has no lane yet.' }))
+
+  const today = todayNum()
+  const span = (from: number, to: number) => ({ timeline: { start: dayIso(today + from), end: dayIso(today + to) } })
+  const roadmap = makeContainer('Roadmap', 'timeline')
+  addChild(doc, tracker.id, roadmap)
+  addChild(doc, roadmap.id, makeLeaf('Alpha launch', 'placeholder', { color: '#7c9cff', label: 'Alpha' }), { meta: span(-2, 2) })
+  mirror(doc, post.id, roadmap.id, { meta: span(1, 5) })
+  addChild(doc, roadmap.id, makeLeaf('Review', 'todo', { items: [{ id: 'r1', text: 'Read draft', done: false }] }), {
+    meta: span(6, 7),
+  })
+
   // the project tracker should open on Alpha
   tracker.viewState.tabs = { active: tracker.slots[0].id }
 
@@ -128,6 +154,30 @@ export function seedDoc(): Doc {
     meta: { document: { height: 320 } },
   })
   mirror(doc, sketchpad.id, social.id, { meta: { document: { height: 280 } } })
+
+  // --- Focus: classic tiling WM layouts. Master + stack (dwm) with a spiral
+  // (bspwm) nested in its stack. Neither stores anything per window: the
+  // layout comes from the order alone.
+  const focus = makeContainer('Focus', 'master', { master: { ratio: 0.55, count: 1 } })
+  addChild(doc, root.id, focus)
+  addChild(
+    doc,
+    focus.id,
+    makeLeaf('Today', 'note', {
+      text: 'Master + stack: the first window is "main", the rest stack beside it. Press ⇱ main on a stacked window to promote it. That just moves it first in the shared order, so every other view of this container sees the new order too.',
+    }),
+  )
+  const scratch = makeContainer('Scratch', 'spiral')
+  addChild(doc, focus.id, scratch)
+  for (const [label, color] of [
+    ['one', '#7c9cff'],
+    ['two', '#e66f8f'],
+    ['three', '#46c2a5'],
+    ['four', '#f2b84b'],
+    ['five', '#a78bfa'],
+  ])
+    addChild(doc, scratch.id, makeLeaf(`Pane ${label}`, 'placeholder', { color, label }))
+  addChild(doc, focus.id, makeLeaf('Timer', 'widget', WIDGET_TEMPLATES.find((t) => t.id === 'timer')!.data()))
 
   root.viewState.tabs = { active: workSlot }
   return doc

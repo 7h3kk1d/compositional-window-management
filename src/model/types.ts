@@ -23,6 +23,12 @@ export const VIEW_TYPES = [
   'document',
   'outline',
   'json',
+  'scroll',
+  'master',
+  'spiral',
+  'table',
+  'kanban',
+  'timeline',
 ] as const
 export type ViewType = (typeof VIEW_TYPES)[number]
 
@@ -45,10 +51,15 @@ export interface SlotMeta {
   grid?: { colSpan: number; rowSpan: number }
   dock?: { side: DockSide; collapsed: boolean }
   document?: { height: number }
+  /** Scrolling tiler: windows sharing a column number stack; width is a fraction of the viewport. Columns may be fractional (to insert between). */
+  scroll?: { column: number; width: number }
+  kanban?: { lane: string }
+  /** Inclusive ISO dates (YYYY-MM-DD). */
+  timeline?: { start: string; end: string }
 }
 
 /** Views whose children carry slot-level metadata. */
-export const SLOT_META_VIEWS = ['canvas', 'floating', 'split', 'grid', 'dock', 'document'] as const
+export const SLOT_META_VIEWS = ['canvas', 'floating', 'split', 'grid', 'dock', 'document', 'scroll', 'kanban', 'timeline'] as const
 export type SlotMetaView = (typeof SLOT_META_VIEWS)[number]
 
 export interface Slot {
@@ -71,6 +82,12 @@ export interface ViewState {
   canvas?: { panX: number; panY: number; zoom: number }
   grid?: { columns: number }
   outline?: { collapsed: string[] }
+  /** Master + stack: the first `count` children share the main area. */
+  master?: { ratio: number; count: number }
+  /** Display-only sort; never reorders the shared slot order. */
+  table?: { sort: 'title' | 'kind' | null; desc?: boolean }
+  kanban?: { lanes: string[] }
+  timeline?: { dayWidth: number }
 }
 
 export interface Leaf {

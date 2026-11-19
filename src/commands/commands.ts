@@ -23,6 +23,7 @@ import {
   reveal,
   setViewAt,
   viewAt,
+  setKanbanLanes,
   setViewState,
   unwrap,
   wouldCycle,
@@ -31,7 +32,22 @@ import {
 import { seedDoc } from '../model/seed'
 import { act, useStore } from '../model/store'
 import { VIEW_TYPES, type Container, type Doc, type Node, type Path, type Slot, type SlotMeta, type ViewType } from '../model/types'
-import { DEFAULT_H, DEFAULT_W, canvasRects } from '../model/viewMeta'
+import {
+  DEFAULT_H,
+  DEFAULT_SCROLL_WIDTH,
+  DEFAULT_W,
+  DERIVED_SPAN_DAYS,
+  canvasRects,
+  dayIso,
+  dayNum,
+  dayWidthOf,
+  kanbanLanes,
+  masterState,
+  newLaneName,
+  scrollMeta,
+  timelineMeta,
+} from '../model/viewMeta'
+
 import { canvasSizes, canvasViewState, fitCanvas } from '../views/canvasUtil'
 import { toJson } from '../views/JsonView'
 import { displayTitle } from '../model/titles'
@@ -107,6 +123,18 @@ export function placementFor(c: Container, view: ViewType): SlotMeta {
   if (view === 'floating') {
     const rects = canvasRects({ ...c, slots: [...c.slots, { id: '_', nodeId: '_', meta: {} }] }, 'floating')
     return { floating: rects[rects.length - 1] }
+  }
+  if (view === 'scroll') {
+    // a new column at the end of the strip
+    const cols = scrollMeta(c).map((m) => m.column)
+    return { scroll: { column: cols.length ? Math.floor(Math.max(...cols)) + 1 : 0, width: DEFAULT_SCROLL_WIDTH } }
+  }
+  if (view === 'kanban') return { kanban: { lane: kanbanLanes(c)[0] } }
+  if (view === 'timeline') {
+    // right after the last thing on the timeline
+    const ends = timelineMeta(c).map((m) => dayNum(m.end))
+    const start = ends.length ? Math.max(...ends) + 1 : dayNum(timelineMeta({ ...c, slots: [{ id: '_', nodeId: '_', meta: {} }] })[0].start)
+    return { timeline: { start: dayIso(start), end: dayIso(start + DERIVED_SPAN_DAYS - 1) } }
   }
   return {}
 }
@@ -275,7 +303,7 @@ export function rootItems(ctx: Ctx): Item[] {
       group: 'View',
       keywords: [VIEW_INFO[v].blurb, 'switch', 'layout'],
       hint: ctx.view === v ? 'current' : undefined,
-      shortcut: `⌥${i + 1}`,
+      shortcut: i < 9 ? `⌥${i + 1}` : undefined,
       // only this placement changes; other mirrors keep their own views
       run: () => act((d) => setViewAt(d, ctx.containerPath, v)),
     }),
@@ -312,6 +340,34 @@ export function rootItems(ctx: Ctx): Item[] {
             const cur = g.viewState.grid?.columns ?? Math.max(1, Math.ceil(Math.sqrt(g.slots.length)))
             g.viewState.grid = { columns: Math.max(1, cur + delta) }
           }),
+      })
+
+  if (ctx.view === 'master')
+    for (const delta of [1, -1])
+      items.push({
+        id: 'master-count' + delta,
+        title: delta > 0 ? 'Master: more main windows' : 'Master: fewer main windows',
+        group: 'View',
+        run: () =>
+          act((d) => {
+            const st = masterState(getContainer(d, c.id))
+            setViewState(d, c.id, 'master', { ...st, count: Math.max(1, Math.min(c.slots.length, st.count + delta)) })
+          }),
+      })
+  if (ctx.view === 'kanban')
+    items.push({
+      id: 'kanban-lane',
+      title: 'Kanban: add lane',
+      group: 'View',
+      run: () => act((d) => setKanbanLanes(d, c.id, (ls) => [...ls, newLaneName(c)])),
+    })
+  if (ctx.view === 'timeline')
+    for (const k of [2, 0.5])
+      items.push({
+        id: 'tl-zoom' + k,
+        title: k > 1 ? 'Timeline: zoom in' : 'Timeline: zoom out',
+        group: 'View',
+        run: () => act((d) => setViewState(d, c.id, 'timeline', { dayWidth: Math.min(200, Math.max(12, dayWidthOf(c) * k)) })),
       })
 
   items.push(

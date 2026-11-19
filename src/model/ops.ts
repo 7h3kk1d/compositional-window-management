@@ -5,7 +5,7 @@
 import { current, isDraft } from 'immer'
 import { newId } from './ids'
 import { displayTitle } from './titles'
-import { resolvedMeta } from './viewMeta'
+import { kanbanLanes, resolvedMeta } from './viewMeta'
 import {
   SLOT_META_VIEWS,
   type Container,
@@ -468,4 +468,11 @@ export function reveal(doc: Doc, path: Path) {
       parent.viewState.tabs = { ...parent.viewState.tabs, active: slot.id }
     if (parentView === 'dock' && slot.meta.dock?.collapsed) slot.meta.dock.collapsed = false
   })
+}
+
+/** Change a kanban's lane list; a rename also relabels every card that stored the old name. */
+export function setKanbanLanes(doc: Doc, containerId: NodeId, fn: (lanes: string[]) => string[], rename?: [string, string]) {
+  const c = getContainer(doc, containerId)
+  c.viewState.kanban = { lanes: fn(kanbanLanes(c)) }
+  if (rename) for (const s of c.slots) if (s.meta.kanban?.lane === rename[0]) s.meta.kanban = { lane: rename[1] }
 }
