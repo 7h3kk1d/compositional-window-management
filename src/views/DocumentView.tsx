@@ -5,6 +5,7 @@ import { indexFromPoint } from '../dnd/dropAdapters'
 import { removeSlot, setLeafData, setSlotMeta } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
 import type { Container, Path, Slot } from '../model/types'
+import { displayTitle } from '../model/titles'
 import { documentHeight } from '../model/viewMeta'
 import { Child, startPointerDrag, useDropAdapter, type ViewProps } from './NodeView'
 
@@ -43,7 +44,7 @@ function Block({ container, slot, path, depth }: { container: Container; slot: S
   const focused = useStore((s) => pathKey(s.focus) === childKey)
   const drag = useDraggable({
     id: 'drag:' + childKey,
-    data: { fromId: container.id, slotId: slot.id, nodeId: slot.nodeId, path: childPath, title: node?.title },
+    data: { fromId: container.id, slotId: slot.id, nodeId: slot.nodeId, path: childPath, title: node ? displayTitle(useStore.getState().doc, node.id) : '' },
   })
   const inline = node?.type === 'leaf' && contentKind(node.content.kind)?.inline
 

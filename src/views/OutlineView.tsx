@@ -3,6 +3,7 @@ import { refCounts, reveal, setViewState } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
 import type { Container, NodeId, Path } from '../model/types'
 import type { ViewProps } from './NodeView'
+import { displayTitle, isAutoTitled } from '../model/titles'
 import { VIEW_INFO } from './viewInfo'
 
 /** The same children, viewed as a tree. Mirrored nodes appear at every reference. */
@@ -69,7 +70,7 @@ function Items({
               <span className="kind-icon">
                 {isC ? VIEW_INFO[node.view].icon : contentKind(node.content.kind)?.icon}
               </span>
-              <span className="title">{node.title}</span>
+              <span className={`title ${isAutoTitled(doc, node.id) ? 'auto' : ''}`}>{displayTitle(doc, node.id)}</span>
               {isC && <span className="tag">{VIEW_INFO[node.view].label}</span>}
               {(counts.get(node.id) ?? 0) > 1 && <span className="badge mirror-badge">⧉ {counts.get(node.id)}</span>}
             </div>

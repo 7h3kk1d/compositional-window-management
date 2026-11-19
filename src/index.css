@@ -220,6 +220,15 @@ kbd {
   text-overflow: ellipsis;
   min-width: 0;
 }
+.title.auto {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--muted);
+}
+.frame.focused > .frame-header .title.auto,
+.tab.active .title.auto {
+  color: var(--text);
+}
 .title-input {
   border: 1px solid var(--accent);
   border-radius: 4px;

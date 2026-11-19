@@ -6,6 +6,7 @@ import type { DropData } from '../dnd/resolveDrop'
 import { refCounts, removeSlot, rename, setLeafData, setView } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
 import { VIEW_TYPES, type Container, type Leaf, type NodeId, type Path, type Slot, type ViewType } from '../model/types'
+import { displayTitle, isAutoTitled } from '../model/titles'
 import { VIEW_INFO } from './viewInfo'
 import { VIEW_COMPONENTS } from './registry'
 
@@ -76,16 +77,17 @@ function Frame({
       parentId: parentId ?? '',
       parentPath: path.slice(0, -1),
       path,
-      title: node.title,
+      title: displayTitle(useStore.getState().doc, node.id),
       noSplit: inSpatial,
     } satisfies DropData,
   })
 
+  const shownTitle = useStore((s) => displayTitle(s.doc, node.id))
   const drag = useDraggable({
     // headerless frames (tab pages) are dragged by their tab, which owns 'drag:'+key
     id: (bare ? 'drag-bare:' : 'drag:') + key,
     disabled: !parentId || bare,
-    data: { fromId: parentId, slotId: slot?.id, nodeId: node.id, path, title: node.title },
+    data: { fromId: parentId, slotId: slot?.id, nodeId: node.id, path, title: shownTitle },
   })
 
   return (
@@ -119,7 +121,7 @@ function Frame({
           <span className="kind-icon">
             {node.type === 'container' ? VIEW_INFO[node.view].icon : contentKind(node.content.kind)?.icon ?? '?'}
           </span>
-          <Title id={node.id} title={node.title} />
+          <Title id={node.id} />
           {derived && (
             <span className="badge derived-badge" title="No stored layout for this view yet: position is derived">
               derived
@@ -193,30 +195,45 @@ export function FrameControls({ node, path }: { node: Leaf | Container; path: Pa
   )
 }
 
-export function Title({ id, title }: { id: NodeId; title: string }) {
+/**
+ * A node's title. Titleless containers show an automatic title derived from
+ * what they display (italic). Renaming to empty returns to automatic.
+ */
+export function Title({ id }: { id: NodeId }) {
+  const title = useStore((s) => s.doc.nodes[id]?.title ?? '')
+  const shown = useStore((s) => displayTitle(s.doc, id))
+  const auto = useStore((s) => isAutoTitled(s.doc, id))
+  const isContainer = useStore((s) => s.doc.nodes[id]?.type === 'container')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
   if (!editing)
     return (
       <span
-        className="title"
-        title="Double-click to rename"
+        className={`title ${auto ? 'auto' : ''}`}
+        title={
+          auto
+            ? 'Automatic title (from what this shows). Double-click to name it.'
+            : 'Double-click to rename' + (isContainer ? ' (clear to use an automatic title)' : '')
+        }
         onDoubleClick={() => {
           setDraft(title)
           setEditing(true)
         }}
       >
-        {title}
+        {shown}
       </span>
     )
   const commit = () => {
     setEditing(false)
-    if (draft.trim() && draft !== title) act((d) => rename(d, id, draft.trim()))
+    const next = draft.trim()
+    // leaves need a title; containers may go back to automatic with ''
+    if (next !== title && (next || isContainer)) act((d) => rename(d, id, next))
   }
   return (
     <input
       className="title-input"
       autoFocus
+      placeholder={isContainer ? shown + ' (automatic)' : ''}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -258,7 +275,13 @@ function ContainerBody({ container, path, depth, noSplit }: ViewProps & { noSpli
   const key = pathKey(path)
   const drop = useDroppable({
     id: 'drop:' + key,
-    data: { kind: 'container', containerId: container.id, path, title: container.title, noSplit } satisfies DropData,
+    data: {
+      kind: 'container',
+      containerId: container.id,
+      path,
+      title: displayTitle(useStore.getState().doc, container.id),
+      noSplit,
+    } satisfies DropData,
   })
   const View = VIEW_COMPONENTS[container.view]
   return (

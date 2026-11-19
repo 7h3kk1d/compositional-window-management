@@ -19,6 +19,7 @@ import {
   occurrences,
   purgeOrphans,
   resolvePath,
+  rename,
   reveal,
   setView,
   setViewState,
@@ -32,6 +33,7 @@ import { VIEW_TYPES, type Container, type Doc, type Node, type Path, type Slot, 
 import { DEFAULT_H, DEFAULT_W, canvasRects } from '../model/viewMeta'
 import { canvasSizes, canvasViewState, fitCanvas } from '../views/canvasUtil'
 import { toJson } from '../views/JsonView'
+import { displayTitle } from '../model/titles'
 import { VIEW_INFO } from '../views/viewInfo'
 
 export interface Ctx {
@@ -77,7 +79,7 @@ export function buildCtx(): Ctx {
     slot,
     container,
     containerPath,
-    label: nodes.map((n) => n.title).join(' › '),
+    label: nodes.map((n) => displayTitle(doc, n.id)).join(' › '),
   }
 }
 
@@ -136,7 +138,7 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
         title: `${VIEW_INFO[v].icon}  ${VIEW_INFO[v].label} container`,
         group: 'Container',
         keywords: [VIEW_INFO[v].blurb],
-        run: () => addNode(ctx, makeContainer(`New ${VIEW_INFO[v].label.toLowerCase()}`, v)),
+        run: () => addNode(ctx, makeContainer('', v)),
       })),
     ],
   },
@@ -193,7 +195,7 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
       const walk = (id: string, path: Path, labels: string[], depth: number) => {
         const n = ctx.doc.nodes[id]
         if (!n || depth > 24) return
-        const here = [...labels, n.title]
+        const here = [...labels, displayTitle(ctx.doc, id)]
         if (!seen.has(id)) {
           seen.add(id)
           out.push({ id: 'goto-' + id, title: here.join(' › '), hint: n.type === 'container' ? VIEW_INFO[n.view].label : 'leaf', run: () => focusTo(path) })
@@ -209,7 +211,7 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
     items: (ctx) =>
       occurrences(ctx.doc, ctx.node.id).map((p, i) => ({
         id: 'occ-' + i,
-        title: resolvePath(ctx.doc, p).nodes.map((n) => n.title).join(' › '),
+        title: resolvePath(ctx.doc, p).nodes.map((n) => displayTitle(ctx.doc, n.id)).join(' › '),
         run: () => focusTo(p),
       })),
   },
@@ -218,8 +220,8 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
     items: (ctx) =>
       collectOrphans(ctx.doc).map((id) => ({
         id: 'orphan-' + id,
-        title: ctx.doc.nodes[id].title,
-        hint: 'into ' + ctx.container.title,
+        title: displayTitle(ctx.doc, id),
+        hint: 'into ' + displayTitle(ctx.doc, ctx.container.id),
         run: () => {
           let sid: string | null = null
           act((d) => {
@@ -284,7 +286,7 @@ export function rootItems(ctx: Ctx): Item[] {
       })
 
   items.push(
-    { id: 'add', title: 'Add child…', group: 'Structure', page: 'add', shortcut: '⌥N note', hint: '→ ' + c.title },
+    { id: 'add', title: 'Add child…', group: 'Structure', page: 'add', shortcut: '⌥N note', hint: '→ ' + displayTitle(ctx.doc, c.id) },
   )
   if (hasParent) {
     items.push(
@@ -314,6 +316,15 @@ export function rootItems(ctx: Ctx): Item[] {
       },
       { id: 'later', title: 'Move later', group: 'Structure', shortcut: '⌥⇧→', run: (x) => reorder(x, 1) },
     )
+    if (ctx.node.type === 'container' && ctx.node.title)
+      items.push({
+        id: 'auto-title',
+        title: 'Use automatic title',
+        group: 'Structure',
+        keywords: ['rename', 'titleless', 'name'],
+        hint: 'shows “' + displayTitle(ctx.doc, ctx.node.id, 0, true) + '”',
+        run: (x) => act((d) => rename(d, x.node.id, '')),
+      })
     if (ctx.node.type === 'container')
       items.push({
         id: 'unwrap',
@@ -386,9 +397,9 @@ export function rootItems(ctx: Ctx): Item[] {
     },
     {
       id: 'export-sub',
-      title: `Export “${c.title}” as nested JSON`,
+      title: `Export “${displayTitle(ctx.doc, c.id)}” as nested JSON`,
       group: 'Data',
-      run: (x) => download(`${c.title}.json`, JSON.stringify(toJson(x.doc, c.id), null, 2)),
+      run: (x) => download(`${displayTitle(x.doc, c.id)}.json`, JSON.stringify(toJson(x.doc, c.id), null, 2)),
     },
     { id: 'import', title: 'Import document JSON…', group: 'Data', run: () => importDoc() },
     {

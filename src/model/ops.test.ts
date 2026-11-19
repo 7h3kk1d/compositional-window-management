@@ -24,6 +24,7 @@ import {
   wrap,
 } from './ops'
 import { seedDoc } from './seed'
+import { displayTitle } from './titles'
 import type { Doc } from './types'
 import { canvasRects, isDerived } from './viewMeta'
 
@@ -191,6 +192,29 @@ describe('ops inside immer (as the store runs them)', () => {
       materialize(d, root.id)
     })
     expect(Object.keys(next.nodes).length).toBeGreaterThan(Object.keys(doc.nodes).length)
+  })
+})
+
+describe('titleless containers', () => {
+  it('derive their display title from what they show', () => {
+    const { doc, root, a } = canvasDoc() // children "a", "b"
+    wrap(doc, root.id, a, 'tabs') // titleless wrapper around "a"
+    const box = root.slots[0].nodeId
+    expect(getContainer(doc, box).title).toBe('')
+    expect(displayTitle(doc, box)).toBe('a')
+    // a titleless split beside it: named after its first child, "+N" for the rest
+    const p = splitBeside(doc, [a], root.slots[1].nodeId, 'right')!
+    const split = getContainer(doc, root.slots[0].nodeId)
+    expect(p).toBeTruthy()
+    expect(displayTitle(doc, split.id)).toBe('a +1')
+    // tabs follow the active tab
+    setView(doc, split.id, 'tabs')
+    split.viewState.tabs = { active: split.slots[1].id }
+    expect(displayTitle(doc, split.id)).toBe('b')
+    // empty
+    const empty = makeContainer('', 'grid')
+    doc.nodes[empty.id] = empty
+    expect(displayTitle(doc, empty.id)).toBe('Empty grid')
   })
 })
 

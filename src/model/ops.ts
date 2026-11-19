@@ -4,6 +4,7 @@
  */
 import { current, isDraft } from 'immer'
 import { newId } from './ids'
+import { displayTitle } from './titles'
 import { resolvedMeta } from './viewMeta'
 import {
   SLOT_META_VIEWS,
@@ -171,7 +172,7 @@ export function allContainers(doc: Doc): { container: Container; path: Path; lab
     const n = doc.nodes[id]
     if (!n || n.type !== 'container' || seen.has(id)) return
     seen.add(id)
-    const here = [...labels, n.title]
+    const here = [...labels, displayTitle(doc, id)]
     out.push({ container: n, path, label: here.join(' › ') })
     for (const s of n.slots) walk(s.nodeId, [...path, s.id], here)
   }
@@ -338,7 +339,8 @@ export function setLeafData(doc: Doc, nodeId: NodeId, data: unknown) {
 export function wrap(doc: Doc, containerId: NodeId, slotId: SlotId, view: ViewType, title?: string) {
   const slot = findSlot(getContainer(doc, containerId), slotId)
   const inner = getNode(doc, slot.nodeId)
-  const box = makeContainer(title ?? inner.title, view)
+  // titleless by default: it displays the title of what it shows (see titles.ts)
+  const box = makeContainer(title ?? '', view)
   doc.nodes[box.id] = box
   const innerSlot: Slot = { id: newId('s'), nodeId: inner.id, meta: {} }
   box.slots.push(innerSlot)
@@ -377,7 +379,7 @@ export function splitBeside(doc: Doc, targetPath: Path, nodeId: NodeId, edge: Ed
   if (slots.length !== targetPath.length) return null
   const target = nodes[nodes.length - 1]
   if (wouldCycle(doc, target.id, nodeId)) return null
-  const split = makeContainer('Split', 'split', {
+  const split = makeContainer('', 'split', {
     split: { direction: edge === 'left' || edge === 'right' ? 'row' : 'column' },
   })
   const targetSlot: Slot = { id: newId('s'), nodeId: target.id, meta: { split: { size: 1 } } }
@@ -416,7 +418,10 @@ export function reveal(doc: Doc, path: Path) {
   slots.forEach((slot, i) => {
     const parent = nodes[i]
     if (parent.type !== 'container') return
-    if (parent.view === 'tabs') parent.viewState.tabs = { ...parent.viewState.tabs, active: slot.id }
+    // only write on change: assigning an equal object still counts as an
+    // edit to immer and would add an empty undo step
+    if (parent.view === 'tabs' && parent.viewState.tabs?.active !== slot.id)
+      parent.viewState.tabs = { ...parent.viewState.tabs, active: slot.id }
     if (parent.view === 'dock' && slot.meta.dock?.collapsed) slot.meta.dock.collapsed = false
   })
 }
