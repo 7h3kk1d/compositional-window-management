@@ -12,6 +12,9 @@ npm run dev     # http://localhost:5173
 npm test        # model tests (lens round-trips, mirroring, cycles)
 ```
 
+A guided tour starts on the first visit (`src/tour/tour.ts`, built on driver.js). Replay it with the **?** button
+or ⌘K → "Take the tour". Steps that need demo content your layout lacks are skipped.
+
 ## Ideas in the code
 
 - **Layout lives on the edge** (`Slot.meta`, `src/model/types.ts`). The same node can be mirrored into several

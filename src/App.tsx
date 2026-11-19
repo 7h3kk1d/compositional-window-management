@@ -19,6 +19,7 @@ import { resolveDrop, type DragData, type DropData, type DropIntent } from './dn
 import { collectOrphans, getContainer, type Edge, mirror, moveSlot, removeSlot, splitBeside, viewAt } from './model/ops'
 import { act, pathKey, useStore } from './model/store'
 import type { Path } from './model/types'
+import { maybeStartTour, startTour } from './tour/tour'
 import { NodeView } from './views/NodeView'
 
 /** The path a drop target stands for (used to exclude the dragged subtree). */
@@ -84,6 +85,7 @@ export default function App() {
       alt.current = e.altKey
       setAltDown(e.altKey)
     }
+    maybeStartTour()
     window.addEventListener('keydown', onGlobalKeyDown)
     window.addEventListener('keydown', track)
     window.addEventListener('keyup', track)
@@ -145,6 +147,9 @@ export default function App() {
             ⌫ {orphans} closed
           </button>
         )}
+        <button className="ghost tour-button" onClick={startTour} title="Take the tour">
+          ?
+        </button>
         <button className="palette-button" onClick={() => useStore.getState().openPalette()}>
           Commands <kbd>⌘K</kbd>
         </button>

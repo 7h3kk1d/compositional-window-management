@@ -30,6 +30,7 @@ import {
   wrap,
 } from '../model/ops'
 import { seedDoc } from '../model/seed'
+import { startTour } from '../tour/tour'
 import { act, useStore } from '../model/store'
 import { VIEW_TYPES, type Container, type Doc, type Node, type Path, type Slot, type SlotMeta, type ViewType } from '../model/types'
 import {
@@ -498,6 +499,14 @@ export function rootItems(ctx: Ctx): Item[] {
       title: 'Reset to demo layout',
       group: 'Data',
       run: () => useStore.getState().replaceDoc(seedDoc()),
+    },
+    {
+      id: 'tour',
+      title: 'Take the tour',
+      group: 'Help',
+      keywords: ['help', 'tutorial', 'intro', 'onboarding', 'guide'],
+      // after the palette closes
+      run: () => setTimeout(startTour, 50),
     },
   )
   return items
