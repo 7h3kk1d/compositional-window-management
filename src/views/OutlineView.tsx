@@ -1,5 +1,5 @@
 import { contentKind } from '../content/registry'
-import { refCounts, reveal, setViewState } from '../model/ops'
+import { refCounts, reveal, setViewState, slotView } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
 import type { Container, NodeId, Path } from '../model/types'
 import type { ViewProps } from './NodeView'
@@ -68,10 +68,10 @@ function Items({
                 {isC ? (open ? '▾' : '▸') : '·'}
               </button>
               <span className="kind-icon">
-                {isC ? VIEW_INFO[node.view].icon : contentKind(node.content.kind)?.icon}
+                {isC ? VIEW_INFO[slotView(doc, s)].icon : contentKind(node.content.kind)?.icon}
               </span>
-              <span className={`title ${isAutoTitled(doc, node.id) ? 'auto' : ''}`}>{displayTitle(doc, node.id)}</span>
-              {isC && <span className="tag">{VIEW_INFO[node.view].label}</span>}
+              <span className={`title ${isAutoTitled(doc, node.id) ? 'auto' : ''}`}>{displayTitle(doc, node.id, { view: s.view })}</span>
+              {isC && <span className="tag">{VIEW_INFO[slotView(doc, s)].label}</span>}
               {(counts.get(node.id) ?? 0) > 1 && <span className="badge mirror-badge">⧉ {counts.get(node.id)}</span>}
             </div>
             {open && (

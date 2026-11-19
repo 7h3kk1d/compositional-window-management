@@ -14,6 +14,10 @@ npm test        # model tests (lens round-trips, mirroring, cycles)
 
 - **Layout lives on the edge** (`Slot.meta`, `src/model/types.ts`). The same node can be mirrored into several
   parents, each with its own position and size.
+- **Views are per placement too** (`Slot.view`). A container mirrored into two places can be a grid in one and an
+  outline in the other, both live on the same data (the demo mirrors Projects onto the Play canvas as an outline).
+  The root has no slot, so it uses `Container.defaultView`, which is also the starting view for new placements.
+  View *state* (active tab, pan/zoom, grid columns) is still shared per container.
 - **Lens complement.** Each view's metadata is kept side by side, so switching canvas → tabs → canvas restores the original layout exactly.
   Actions only write the active view's key. A child created in tabs has no canvas position, so the canvas *derives*
   one, shown dashed with a "derived" badge (`src/model/viewMeta.ts`), until you move it or run "Materialize".

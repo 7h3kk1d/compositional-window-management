@@ -21,7 +21,8 @@ import {
   resolvePath,
   rename,
   reveal,
-  setView,
+  setViewAt,
+  viewAt,
   setViewState,
   unwrap,
   wouldCycle,
@@ -46,6 +47,8 @@ export interface Ctx {
   /** Nearest container: the focused node if it is one, otherwise its parent. */
   container: Container
   containerPath: Path
+  /** How the nearest container is shown *at this placement* (views are per reference). */
+  view: ViewType
   label: string
 }
 
@@ -79,13 +82,14 @@ export function buildCtx(): Ctx {
     slot,
     container,
     containerPath,
-    label: nodes.map((n) => displayTitle(doc, n.id)).join(' › '),
+    view: viewAt(doc, containerPath),
+    label: nodes.map((n, i) => displayTitle(doc, n.id, { view: i ? slots[i - 1].view : undefined })).join(' › '),
   }
 }
 
-/** Metadata for a new child, in the semantics of the target's *active* view. */
-export function placementFor(c: Container): SlotMeta {
-  if (c.view === 'canvas') {
+/** Metadata for a new child, in the semantics of the view the target is shown in. */
+export function placementFor(c: Container, view: ViewType): SlotMeta {
+  if (view === 'canvas') {
     const vs = canvasViewState(c)
     const size = canvasSizes.get(c.id) ?? { w: 800, h: 600 }
     const z = canvasRects(c, 'canvas').reduce((m, r) => Math.max(m, r.z), 0) + 1
@@ -100,7 +104,7 @@ export function placementFor(c: Container): SlotMeta {
       },
     }
   }
-  if (c.view === 'floating') {
+  if (view === 'floating') {
     const rects = canvasRects({ ...c, slots: [...c.slots, { id: '_', nodeId: '_', meta: {} }] }, 'floating')
     return { floating: rects[rects.length - 1] }
   }
@@ -116,7 +120,7 @@ function addNode(ctx: Ctx, node: Node) {
   const c = ctx.container
   let sid = ''
   act((d) => {
-    sid = addChild(d, c.id, node, { meta: placementFor(c) })
+    sid = addChild(d, c.id, node, { meta: placementFor(c, ctx.view), parentView: ctx.view })
   })
   if (sid) focusTo([...ctx.containerPath, sid])
 }
@@ -156,14 +160,17 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
     items: (ctx) =>
       allContainers(ctx.doc)
         .filter(({ container }) => container.id !== ctx.parent?.id && !wouldCycle(ctx.doc, container.id, ctx.node.id))
-        .map(({ container, path, label }) => ({
+        .map(({ container, path, view, label }) => ({
           id: 'move-' + container.id,
           title: label,
-          hint: VIEW_INFO[container.view].label,
+          hint: VIEW_INFO[view].label,
           run: () => {
             let sid: string | null = null
             act((d) => {
-              sid = moveSlot(d, ctx.parent!.id, ctx.slot!.id, container.id, { meta: placementFor(container) })
+              sid = moveSlot(d, ctx.parent!.id, ctx.slot!.id, container.id, {
+                meta: placementFor(container, view),
+                parentView: view,
+              })
             })
             if (sid) focusTo([...path, sid])
           },
@@ -174,14 +181,20 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
     items: (ctx) =>
       allContainers(ctx.doc)
         .filter(({ container }) => !wouldCycle(ctx.doc, container.id, ctx.node.id))
-        .map(({ container, path, label }) => ({
+        .map(({ container, path, view, label }) => ({
           id: 'mirror-' + container.id,
           title: label,
-          hint: VIEW_INFO[container.view].label,
+          hint: VIEW_INFO[view].label,
           run: () => {
             let sid: string | null = null
             act((d) => {
-              sid = mirror(d, ctx.node.id, container.id, { meta: placementFor(container) })
+              // the mirror starts with the view of the copy it came from; after
+              // that, each placement's view is independent
+              sid = mirror(d, ctx.node.id, container.id, {
+                meta: placementFor(container, view),
+                parentView: view,
+                view: ctx.slot?.view,
+              })
             })
             if (sid) focusTo([...path, sid])
           },
@@ -195,10 +208,16 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
       const walk = (id: string, path: Path, labels: string[], depth: number) => {
         const n = ctx.doc.nodes[id]
         if (!n || depth > 24) return
-        const here = [...labels, displayTitle(ctx.doc, id)]
+        const view = n.type === 'container' ? viewAt(ctx.doc, path) : undefined
+        const here = [...labels, displayTitle(ctx.doc, id, { view })]
         if (!seen.has(id)) {
           seen.add(id)
-          out.push({ id: 'goto-' + id, title: here.join(' › '), hint: n.type === 'container' ? VIEW_INFO[n.view].label : 'leaf', run: () => focusTo(path) })
+          out.push({
+            id: 'goto-' + id,
+            title: here.join(' › '),
+            hint: view ? VIEW_INFO[view].label : 'leaf',
+            run: () => focusTo(path),
+          })
         }
         if (n.type === 'container') for (const s of n.slots) walk(s.nodeId, [...path, s.id], here, depth + 1)
       }
@@ -225,7 +244,7 @@ export const PAGES: Record<string, { title: string; items: (ctx: Ctx) => Item[] 
         run: () => {
           let sid: string | null = null
           act((d) => {
-            sid = insertRef(d, ctx.container.id, id, { meta: placementFor(ctx.container) })
+            sid = insertRef(d, ctx.container.id, id, { meta: placementFor(ctx.container, ctx.view), parentView: ctx.view })
           })
           if (sid) focusTo([...ctx.containerPath, sid])
         },
@@ -246,12 +265,13 @@ export function rootItems(ctx: Ctx): Item[] {
       title: `View as ${VIEW_INFO[v].label}`,
       group: 'View',
       keywords: [VIEW_INFO[v].blurb, 'switch', 'layout'],
-      hint: c.view === v ? 'current' : undefined,
+      hint: ctx.view === v ? 'current' : undefined,
       shortcut: `⌥${i + 1}`,
-      run: () => act((d) => setView(d, c.id, v)),
+      // only this placement changes; other mirrors keep their own views
+      run: () => act((d) => setViewAt(d, ctx.containerPath, v)),
     }),
   )
-  if (c.view === 'split')
+  if (ctx.view === 'split')
     items.push({
       id: 'split-dir',
       title: 'Toggle split direction',
@@ -261,7 +281,7 @@ export function rootItems(ctx: Ctx): Item[] {
           setViewState(d, c.id, 'split', { direction: c.viewState.split?.direction === 'column' ? 'row' : 'column' }),
         ),
     })
-  if (c.view === 'canvas')
+  if (ctx.view === 'canvas')
     items.push({
       id: 'canvas-fit',
       title: 'Zoom canvas to fit',
@@ -271,7 +291,7 @@ export function rootItems(ctx: Ctx): Item[] {
         act((d) => setViewState(d, c.id, 'canvas', fitCanvas(c, size.w, size.h)))
       },
     })
-  if (c.view === 'grid')
+  if (ctx.view === 'grid')
     for (const delta of [1, -1])
       items.push({
         id: 'grid-cols' + delta,
@@ -302,7 +322,13 @@ export function rootItems(ctx: Ctx): Item[] {
           act((d) => {
             const copy = deepCopy(d, x.node.id)
             const i = getContainer(d, x.parent!.id).slots.findIndex((s) => s.id === x.slot!.id)
-            sid = insertRef(d, x.parent!.id, copy, { index: i + 1, meta: placementFor(x.parent!) })
+            const parentView = viewAt(d, x.focus.slice(0, -1))
+            sid = insertRef(d, x.parent!.id, copy, {
+              index: i + 1,
+              meta: placementFor(x.parent!, parentView),
+              parentView,
+              view: x.slot!.view,
+            })
           })
           if (sid) focusTo([...ctx.focus.slice(0, -1), sid])
         },
@@ -322,7 +348,7 @@ export function rootItems(ctx: Ctx): Item[] {
         title: 'Use automatic title',
         group: 'Structure',
         keywords: ['rename', 'titleless', 'name'],
-        hint: 'shows “' + displayTitle(ctx.doc, ctx.node.id, 0, true) + '”',
+        hint: 'shows “' + displayTitle(ctx.doc, ctx.node.id, { view: ctx.view, ignoreOwnTitle: true }) + '”',
         run: (x) => act((d) => rename(d, x.node.id, '')),
       })
     if (ctx.node.type === 'container')
@@ -368,17 +394,17 @@ export function rootItems(ctx: Ctx): Item[] {
   items.push(
     {
       id: 'materialize',
-      title: `Materialize derived ${VIEW_INFO[c.view].label.toLowerCase()} layout`,
+      title: `Materialize derived ${VIEW_INFO[ctx.view].label.toLowerCase()} layout`,
       group: 'Layout data',
       keywords: ['store', 'derived', 'lens'],
-      run: () => act((d) => materialize(d, c.id)),
+      run: () => act((d) => materialize(d, c.id, ctx.view)),
     },
     {
       id: 'clear-other',
-      title: `Forget layout for views other than ${VIEW_INFO[c.view].label}`,
+      title: `Forget layout for views other than ${VIEW_INFO[ctx.view].label}`,
       group: 'Layout data',
       keywords: ['lossy', 'meta', 'clear'],
-      run: () => act((d) => clearOtherViewMeta(d, c.id)),
+      run: () => act((d) => clearOtherViewMeta(d, c.id, ctx.view)),
     },
     { id: 'undo', title: 'Undo', group: 'Edit', shortcut: '⌘Z', run: () => useStore.getState().undo() },
     { id: 'redo', title: 'Redo', group: 'Edit', shortcut: '⌘⇧Z', run: () => useStore.getState().redo() },
@@ -461,7 +487,7 @@ function siblingFocus(ctx: Ctx, delta: number) {
 function firstChildFocus(ctx: Ctx) {
   if (ctx.node.type !== 'container' || !ctx.node.slots.length) return
   const c = ctx.node
-  const s = (c.view === 'tabs' && c.slots.find((x) => x.id === c.viewState.tabs?.active)) || c.slots[0]
+  const s = (ctx.view === 'tabs' && c.slots.find((x) => x.id === c.viewState.tabs?.active)) || c.slots[0]
   focusTo([...ctx.focus, s.id])
 }
 
@@ -494,7 +520,7 @@ export function onGlobalKeyDown(e: KeyboardEvent) {
   if (digit) {
     e.preventDefault()
     const v: ViewType = VIEW_TYPES[Number(digit[1]) - 1]
-    act((d) => setView(d, ctx.container.id, v))
+    act((d) => setViewAt(d, ctx.containerPath, v))
     return
   }
   const run = (id: string) => rootItems(ctx).find((x) => x.id === id)?.run?.(ctx)

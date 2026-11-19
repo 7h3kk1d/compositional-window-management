@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { contentKind } from '../content/registry'
 import { dropAdapters, type DropAdapter } from '../dnd/dropAdapters'
 import type { DropData } from '../dnd/resolveDrop'
-import { refCounts, removeSlot, rename, setLeafData, setView } from '../model/ops'
+import { refCounts, removeSlot, rename, setLeafData, setViewAt, viewAt } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
 import { VIEW_TYPES, type Container, type Leaf, type NodeId, type Path, type Slot, type ViewType } from '../model/types'
 import { displayTitle, isAutoTitled } from '../model/titles'
@@ -66,9 +66,12 @@ function Frame({
   // Inside a spatial parent (canvas/floating) dropping on a window just
   // places beside it; edge-splitting only applies in tiled layouts.
   const inSpatial = useStore((s) => {
-    const p = parentId ? s.doc.nodes[parentId] : undefined
-    return p?.type === 'container' && (p.view === 'canvas' || p.view === 'floating')
+    if (!parentId) return false
+    const pv = viewAt(s.doc, path.slice(0, -1))
+    return pv === 'canvas' || pv === 'floating'
   })
+  // how *this placement* shows the container (views are per reference)
+  const view: ViewType | undefined = node.type === 'container' ? (slot?.view ?? node.defaultView) : undefined
   const leafDrop = useDroppable({
     id: 'dropleaf:' + key,
     disabled: node.type !== 'leaf' || !parentId,
@@ -77,12 +80,12 @@ function Frame({
       parentId: parentId ?? '',
       parentPath: path.slice(0, -1),
       path,
-      title: displayTitle(useStore.getState().doc, node.id),
+      title: displayTitle(useStore.getState().doc, node.id, { view }),
       noSplit: inSpatial,
     } satisfies DropData,
   })
 
-  const shownTitle = useStore((s) => displayTitle(s.doc, node.id))
+  const shownTitle = useStore((s) => displayTitle(s.doc, node.id, { view }))
   const drag = useDraggable({
     // headerless frames (tab pages) are dragged by their tab, which owns 'drag:'+key
     id: (bare ? 'drag-bare:' : 'drag:') + key,
@@ -119,9 +122,9 @@ function Frame({
             </span>
           )}
           <span className="kind-icon">
-            {node.type === 'container' ? VIEW_INFO[node.view].icon : contentKind(node.content.kind)?.icon ?? '?'}
+            {view ? VIEW_INFO[view].icon : node.type === 'leaf' ? (contentKind(node.content.kind)?.icon ?? '?') : '?'}
           </span>
-          <Title id={node.id} />
+          <Title id={node.id} view={view} />
           {derived && (
             <span className="badge derived-badge" title="No stored layout for this view yet: position is derived">
               derived
@@ -130,7 +133,7 @@ function Frame({
           <MirrorBadge nodeId={node.id} refs={refs} />
           <span className="spacer" />
           {headerExtra}
-          <FrameControls node={node} path={path} />
+          <FrameControls node={node} path={path} view={view} />
           {parentId && slot && (
             <button className="ghost close" title="Close (remove this reference)" onClick={() => act((d) => removeSlot(d, parentId, slot.id))}>
               ×
@@ -139,7 +142,11 @@ function Frame({
         </header>
       )}
       <div className="frame-body" ref={node.type === 'leaf' ? leafDrop.setNodeRef : undefined}>
-        {node.type === 'leaf' ? <LeafBody leaf={node} /> : <ContainerBody container={node} path={path} depth={depth} noSplit={inSpatial} />}
+        {node.type === 'leaf' ? (
+          <LeafBody leaf={node} />
+        ) : (
+          <ContainerBody container={node} path={path} depth={depth} noSplit={inSpatial} view={view ?? node.defaultView} />
+        )}
       </div>
     </section>
   )
@@ -164,11 +171,12 @@ export function MirrorBadge({ nodeId, refs }: { nodeId: NodeId; refs: number }) 
 }
 
 /** View switcher, add and commands buttons. Shared by frame headers and tab strips. */
-export function FrameControls({ node, path }: { node: Leaf | Container; path: Path }) {
+export function FrameControls({ node, path, view }: { node: Leaf | Container; path: Path; view?: ViewType }) {
+  const mirrored = useStore((s) => (refCounts(s.doc).get(node.id) ?? 0) > 1)
   const setFocus = useStore.getState().setFocus
   return (
     <>
-      {node.type === 'container' && <ViewSelect container={node} />}
+      {node.type === 'container' && <ViewSelect path={path} view={view ?? node.defaultView} mirrored={mirrored} />}
       {node.type === 'container' && (
         <button
           className="ghost"
@@ -199,9 +207,9 @@ export function FrameControls({ node, path }: { node: Leaf | Container; path: Pa
  * A node's title. Titleless containers show an automatic title derived from
  * what they display (italic). Renaming to empty returns to automatic.
  */
-export function Title({ id }: { id: NodeId }) {
+export function Title({ id, view }: { id: NodeId; view?: ViewType }) {
   const title = useStore((s) => s.doc.nodes[id]?.title ?? '')
-  const shown = useStore((s) => displayTitle(s.doc, id))
+  const shown = useStore((s) => displayTitle(s.doc, id, { view }))
   const auto = useStore((s) => isAutoTitled(s.doc, id))
   const isContainer = useStore((s) => s.doc.nodes[id]?.type === 'container')
   const [editing, setEditing] = useState(false)
@@ -245,13 +253,16 @@ export function Title({ id }: { id: NodeId }) {
   )
 }
 
-function ViewSelect({ container }: { container: Container }) {
+function ViewSelect({ path, view, mirrored }: { path: Path; view: ViewType; mirrored: boolean }) {
   return (
     <select
       className="view-select"
-      value={container.view}
-      title="View this container as… (the children and every view's layout are kept)"
-      onChange={(e) => act((d) => setView(d, container.id, e.target.value as ViewType))}
+      value={view}
+      title={
+        'View this container as… (the children and every view’s layout are kept)' +
+        (mirrored ? '\nOnly this copy changes: each mirror has its own view.' : '')
+      }
+      onChange={(e) => act((d) => setViewAt(d, path, e.target.value as ViewType))}
     >
       {VIEW_TYPES.map((v) => (
         <option key={v} value={v}>
@@ -271,7 +282,13 @@ export function LeafBody({ leaf }: { leaf: Leaf }) {
   )
 }
 
-function ContainerBody({ container, path, depth, noSplit }: ViewProps & { noSplit: boolean }) {
+function ContainerBody({
+  container,
+  path,
+  depth,
+  noSplit,
+  view,
+}: ViewProps & { noSplit: boolean; view: ViewType }) {
   const key = pathKey(path)
   const drop = useDroppable({
     id: 'drop:' + key,
@@ -279,13 +296,13 @@ function ContainerBody({ container, path, depth, noSplit }: ViewProps & { noSpli
       kind: 'container',
       containerId: container.id,
       path,
-      title: displayTitle(useStore.getState().doc, container.id),
+      title: displayTitle(useStore.getState().doc, container.id, { view }),
       noSplit,
     } satisfies DropData,
   })
-  const View = VIEW_COMPONENTS[container.view]
+  const View = VIEW_COMPONENTS[view]
   return (
-    <div className={`container-body view-${container.view}`} ref={drop.setNodeRef}>
+    <div className={`container-body view-${view}`} ref={drop.setNodeRef}>
       <View container={container} path={path} depth={depth} />
     </div>
   )

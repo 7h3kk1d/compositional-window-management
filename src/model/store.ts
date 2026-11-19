@@ -98,11 +98,39 @@ export const useStore = create<State>()(
     }),
     {
       name: 'cwm-doc-v1',
+      version: 2,
       partialize: (s) => ({ doc: s.doc, focus: s.focus }),
+      migrate: (persisted, version) => {
+        const state = persisted as { doc: Doc; focus: Path }
+        if (version < 2) migrateViewsToSlots(state.doc)
+        return state
+      },
     },
   ),
 )
 
-export const act = (fn: (doc: Doc) => void, opts?: { key?: string }) => useStore.getState().act(fn, opts)
+/**
+ * v1 → v2: views moved from containers onto slots (per placement). The old
+ * `container.view` becomes `defaultView`, and every existing placement of a
+ * container gets that view.
+ */
+function migrateViewsToSlots(doc: Doc) {
+  const nodes = doc.nodes as unknown as Record<string, Record<string, unknown>>
+  for (const n of Object.values(nodes)) {
+    if (n.type === 'container' && 'view' in n) {
+      n.defaultView = n.view
+      delete n.view
+    }
+  }
+  for (const n of Object.values(doc.nodes)) {
+    if (n.type !== 'container') continue
+    for (const s of n.slots) {
+      const child = doc.nodes[s.nodeId]
+      if (child?.type === 'container' && !s.view) s.view = child.defaultView
+    }
+  }
+}
+
+export const act =(fn: (doc: Doc) => void, opts?: { key?: string }) => useStore.getState().act(fn, opts)
 
 export const pathKey = (p: Path) => p.join('/')

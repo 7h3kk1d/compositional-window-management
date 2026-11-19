@@ -19,9 +19,10 @@ export function toJson(doc: Doc, rootId: NodeId) {
     return {
       id: n.id,
       title: n.title,
-      view: n.view,
+      defaultView: n.defaultView,
       viewState: n.viewState,
-      slots: n.slots.map((s) => ({ slot: s.id, meta: s.meta, node: walk(s.nodeId) })),
+      // each slot is a placement: its own view, plus per-view layout meta
+      slots: n.slots.map((s) => ({ slot: s.id, ...(s.view ? { view: s.view } : {}), meta: s.meta, node: walk(s.nodeId) })),
     }
   }
   return walk(rootId)

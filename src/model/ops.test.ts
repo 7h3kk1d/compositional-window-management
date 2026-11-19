@@ -17,7 +17,9 @@ import {
   removeSlot,
   setLeafData,
   setSlotMeta,
-  setView,
+  setDefaultView,
+  setViewAt,
+  viewAt,
   splitBeside,
   unwrap,
   wouldCycle,
@@ -44,18 +46,18 @@ describe('lens round-tripping', () => {
   it('A -> B -> A without edits is the identity', () => {
     const { doc, root } = canvasDoc()
     const before = structuredClone(doc)
-    setView(doc, root.id, 'tabs')
-    setView(doc, root.id, 'split')
-    setView(doc, root.id, 'canvas')
+    setDefaultView(doc, root.id, 'tabs')
+    setDefaultView(doc, root.id, 'split')
+    setDefaultView(doc, root.id, 'canvas')
     expect(doc).toEqual(before)
   })
 
   it('edits in B keep A metadata for untouched slots', () => {
     const { doc, root, a, b } = canvasDoc()
-    setView(doc, root.id, 'split')
+    setDefaultView(doc, root.id, 'split')
     setSlotMeta(doc, root.id, a, 'split', { size: 3 })
     moveSlot(doc, root.id, b, root.id, { index: 0 }) // reorder
-    setView(doc, root.id, 'canvas')
+    setDefaultView(doc, root.id, 'canvas')
     const sa = root.slots.find((s) => s.id === a)!
     const sb = root.slots.find((s) => s.id === b)!
     expect(sa.meta.canvas).toEqual({ x: 10, y: 20, w: 100, h: 100, z: 1 })
@@ -65,9 +67,9 @@ describe('lens round-tripping', () => {
 
   it('children created in B have no A metadata until materialized', () => {
     const { doc, root } = canvasDoc()
-    setView(doc, root.id, 'tabs')
+    setDefaultView(doc, root.id, 'tabs')
     const c = addChild(doc, root.id, makeLeaf('c', 'note', { text: '' }))
-    setView(doc, root.id, 'canvas')
+    setDefaultView(doc, root.id, 'canvas')
     const sc = root.slots.find((s) => s.id === c)!
     expect(isDerived(sc, 'canvas')).toBe(true)
     // derived placement goes to the right of the placed windows
@@ -151,7 +153,7 @@ describe('splitBeside', () => {
     removeSlot(doc, root.id, b)
     const p = splitBeside(doc, [a], nodeB, 'left')!
     const split = getContainer(doc, root.slots[0].nodeId)
-    expect(split.view).toBe('split')
+    expect(split.defaultView).toBe('split')
     expect(split.slots[0].nodeId).toBe(nodeB)
     expect(root.slots[0].meta.canvas?.x).toBe(10)
     expect(p).toEqual([a, split.slots[0].id])
@@ -188,10 +190,76 @@ describe('ops inside immer (as the store runs them)', () => {
     next = run(next, (d) => unwrap(d, root.id, a))
     next = run(next, (d) => deepCopy(d, (d.nodes[root.id] as typeof root).slots[0].nodeId))
     next = run(next, (d) => {
-      setView(d, root.id, 'canvas')
+      setDefaultView(d, root.id, 'canvas')
       materialize(d, root.id)
     })
     expect(Object.keys(next.nodes).length).toBeGreaterThan(Object.keys(doc.nodes).length)
+  })
+})
+
+describe('views are per placement', () => {
+  function mirroredBox() {
+    const root = makeContainer('root', 'split')
+    const doc: Doc = { root: root.id, nodes: { [root.id]: root } }
+    const box = makeContainer('box', 'grid')
+    const s1 = addChild(doc, root.id, box)
+    addChild(doc, box.id, makeLeaf('x', 'note', { text: '' }))
+    addChild(doc, box.id, makeLeaf('y', 'note', { text: '' }))
+    const s2 = mirror(doc, box.id, root.id, { view: 'outline' })!
+    return { doc, root, box, p1: [s1], p2: [s2] }
+  }
+
+  it('a mirrored container can show a different view in each place', () => {
+    const { doc, p1, p2 } = mirroredBox()
+    expect(viewAt(doc, p1)).toBe('grid') // new placements start at defaultView
+    expect(viewAt(doc, p2)).toBe('outline') // or the view asked for
+    setViewAt(doc, p1, 'canvas')
+    expect(viewAt(doc, p1)).toBe('canvas')
+    expect(viewAt(doc, p2)).toBe('outline') // the other placement is untouched
+  })
+
+  it('the root has no slot, so its view is the default view', () => {
+    const { doc, root } = mirroredBox()
+    setViewAt(doc, [], 'tabs')
+    expect(root.defaultView).toBe('tabs')
+    expect(viewAt(doc, [])).toBe('tabs')
+  })
+
+  it('moving keeps the placement view; wrapping keeps the inner view', () => {
+    const { doc, root, box, p1 } = mirroredBox()
+    setViewAt(doc, p1, 'dock')
+    const other = makeContainer('other', 'tabs')
+    addChild(doc, root.id, other)
+    const moved = moveSlot(doc, root.id, p1[0], other.id)!
+    expect(viewAt(doc, [root.slots.find((s) => s.nodeId === other.id)!.id, moved])).toBe('dock')
+    // wrap the outline placement: outer shows tabs, inner keeps outline
+    const outline = root.slots.find((s) => s.nodeId === box.id)!
+    wrap(doc, root.id, outline.id, 'tabs')
+    expect(outline.view).toBe('tabs')
+    const wrapper = getContainer(doc, outline.nodeId)
+    expect(wrapper.slots[0].view).toBe('outline')
+  })
+
+  it('splitBeside keeps the target view and gives the outer slot a split', () => {
+    const { doc, root, p2 } = mirroredBox()
+    const leaf = makeLeaf('z', 'note', { text: '' })
+    doc.nodes[leaf.id] = leaf
+    splitBeside(doc, p2, leaf.id, 'left')
+    const outer = root.slots.find((s) => s.id === p2[0])!
+    expect(outer.view).toBe('split')
+    const split = getContainer(doc, outer.nodeId)
+    expect(split.slots[1].view).toBe('outline')
+  })
+
+  it('round-trips layout per view regardless of which placement switched', () => {
+    const { doc, box, p1, p2 } = mirroredBox()
+    setViewAt(doc, p1, 'canvas')
+    materialize(doc, box.id, 'canvas')
+    const before = structuredClone(box.slots.map((s) => s.meta.canvas))
+    setViewAt(doc, p2, 'canvas') // the outline placement becomes a canvas too
+    setViewAt(doc, p1, 'tabs')
+    setViewAt(doc, p1, 'canvas')
+    expect(box.slots.map((s) => s.meta.canvas)).toEqual(before)
   })
 })
 
@@ -208,7 +276,7 @@ describe('titleless containers', () => {
     expect(p).toBeTruthy()
     expect(displayTitle(doc, split.id)).toBe('a +1')
     // tabs follow the active tab
-    setView(doc, split.id, 'tabs')
+    setDefaultView(doc, split.id, 'tabs')
     split.viewState.tabs = { active: split.slots[1].id }
     expect(displayTitle(doc, split.id)).toBe('b')
     // empty
@@ -219,10 +287,10 @@ describe('titleless containers', () => {
 })
 
 describe('seed', () => {
-  it('builds a valid doc with one mirrored node', () => {
+  it('builds a valid doc with a mirrored note and a mirrored container', () => {
     const doc = seedDoc()
     const mirrored = Object.values(doc.nodes).filter((n) => refCount(doc, n.id) > 1)
-    expect(mirrored).toHaveLength(1)
+    expect(mirrored.map((n) => n.title).sort()).toEqual(['Ideas (mirrored)', 'Projects'])
     expect(collectOrphans(doc)).toEqual([])
   })
 })

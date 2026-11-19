@@ -95,6 +95,13 @@ export function seedDoc(): Doc {
   addChild(doc, play.id, makeLeaf('Wikipedia', 'iframe', { url: 'https://en.m.wikipedia.org/wiki/Window_manager' }), {
     meta: { canvas: { x: 560, y: 280, w: 420, h: 320, z: 3 } },
   })
+  // The same Projects container that is a tabs view in Work, mirrored here
+  // as an outline: views are per placement, so one container can be viewed
+  // two ways at once, both live on the same data.
+  mirror(doc, tracker.id, play.id, {
+    view: 'outline',
+    meta: { canvas: { x: 1020, y: 0, w: 300, h: 420, z: 4 } },
+  })
 
   // --- Social: a document (timeline-ish)
   const social = makeContainer('Social', 'document')

@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import { onGlobalKeyDown, placementFor } from './commands/commands'
 import { Palette } from './commands/Palette'
 import { resolveDrop, type DragData, type DropData, type DropIntent } from './dnd/resolveDrop'
-import { collectOrphans, getContainer, type Edge, mirror, moveSlot, removeSlot, splitBeside } from './model/ops'
+import { collectOrphans, getContainer, type Edge, mirror, moveSlot, removeSlot, splitBeside, viewAt } from './model/ops'
 import { act, pathKey, useStore } from './model/store'
 import type { Path } from './model/types'
 import { NodeView } from './views/NodeView'
@@ -107,15 +107,21 @@ export default function App() {
     const asMirror = alt.current || (e.activatorEvent as PointerEvent).altKey
     let focus: Path | null = null
     act((d) => {
+      // the dragged placement's view goes with it (moved, mirrored, or split)
+      const srcView = getContainer(d, src.fromId).slots.find((s) => s.id === src.slotId)?.view
       if (intent.kind === 'split') {
         if (!asMirror) removeSlot(d, src.fromId, src.slotId)
-        focus = splitBeside(d, intent.path, src.nodeId, intent.edge)
+        focus = splitBeside(d, intent.path, src.nodeId, intent.edge, srcView)
         if (!focus) throw new Error('cannot split here') // rolls back the removal
         return
       }
-      const placement = intent.placement ?? { meta: placementFor(getContainer(d, intent.containerId)) }
+      const targetView = viewAt(d, intent.path)
+      const placement = {
+        ...(intent.placement ?? { meta: placementFor(getContainer(d, intent.containerId), targetView) }),
+        parentView: targetView,
+      }
       const sid = asMirror
-        ? mirror(d, src.nodeId, intent.containerId, placement)
+        ? mirror(d, src.nodeId, intent.containerId, { ...placement, view: srcView })
         : moveSlot(d, src.fromId, src.slotId, intent.containerId, placement)
       if (sid) focus = [...intent.path, sid]
     })

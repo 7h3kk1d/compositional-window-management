@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { contentKind } from '../content/registry'
 import { indexFromPoint } from '../dnd/dropAdapters'
 import type { DropData } from '../dnd/resolveDrop'
-import { refCounts, removeSlot, setViewState } from '../model/ops'
+import { refCounts, removeSlot, setViewState, slotView } from '../model/ops'
 import { act, pathKey, useStore } from '../model/store'
 import type { Container, Path, Slot } from '../model/types'
 import { Child, FrameControls, MirrorBadge, Title, useDropAdapter, type ViewProps } from './NodeView'
@@ -44,7 +44,7 @@ export function TabsView({ container, path, depth }: ViewProps) {
         </div>
         {active && activeNode && (
           <div className="tab-controls">
-            <FrameControls node={activeNode} path={[...path, active.id]} />
+            <FrameControls node={activeNode} path={[...path, active.id]} view={active.view} />
           </div>
         )}
       </div>
@@ -64,7 +64,7 @@ export function TabsView({ container, path, depth }: ViewProps) {
 
 function Tab({ container, slot, path, active }: { container: Container; slot: Slot; path: Path; active: boolean }) {
   const node = useStore((s) => s.doc.nodes[slot.nodeId])
-  const shown = useStore((s) => displayTitle(s.doc, slot.nodeId))
+  const shown = useStore((s) => displayTitle(s.doc, slot.nodeId, { view: slot.view }))
   const refs = useStore((s) => refCounts(s.doc).get(slot.nodeId) ?? 0)
   const childPath = [...path, slot.id]
   const focused = useStore((s) => pathKey(s.focus) === pathKey(childPath))
@@ -121,9 +121,9 @@ function Tab({ container, slot, path, active }: { container: Container; slot: Sl
       }}
     >
       <span className="kind-icon">
-        {node.type === 'container' ? VIEW_INFO[node.view].icon : contentKind(node.content.kind)?.icon}
+        {node.type === 'container' ? VIEW_INFO[slotView(useStore.getState().doc, slot)].icon : contentKind(node.content.kind)?.icon}
       </span>
-      <Title id={node.id} />
+      <Title id={node.id} view={slot.view} />
       <MirrorBadge nodeId={node.id} refs={refs} />
       <button
         className="ghost tab-close"

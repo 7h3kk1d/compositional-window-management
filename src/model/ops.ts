@@ -164,19 +164,38 @@ export function occurrences(doc: Doc, nodeId: NodeId, limit = 50): Path[] {
   return out
 }
 
+/** The view of the placement a slot creates (falls back to the node's default). */
+export function slotView(doc: Doc, slot: Slot): ViewType {
+  const n = doc.nodes[slot.nodeId]
+  return slot.view ?? (n?.type === 'container' ? n.defaultView : 'tabs')
+}
+
+/**
+ * The view shown at a path. Views are per placement: the same container
+ * can appear at two paths with two different views.
+ */
+export function viewAt(doc: Doc, path: Path): ViewType {
+  const { nodes, slots } = resolvePath(doc, path)
+  const last = slots[slots.length - 1]
+  if (last) return slotView(doc, last)
+  const root = nodes[0]
+  return root.type === 'container' ? root.defaultView : 'tabs'
+}
+
 /** Every container with one representative path, for "Move to / Mirror into". */
-export function allContainers(doc: Doc): { container: Container; path: Path; label: string }[] {
-  const out: { container: Container; path: Path; label: string }[] = []
+export function allContainers(doc: Doc): { container: Container; path: Path; view: ViewType; label: string }[] {
+  const out: { container: Container; path: Path; view: ViewType; label: string }[] = []
   const seen = new Set<NodeId>()
-  const walk = (id: NodeId, path: Path, labels: string[]) => {
+  const walk = (id: NodeId, path: Path, view: ViewType, labels: string[]) => {
     const n = doc.nodes[id]
     if (!n || n.type !== 'container' || seen.has(id)) return
     seen.add(id)
-    const here = [...labels, displayTitle(doc, id)]
-    out.push({ container: n, path, label: here.join(' › ') })
-    for (const s of n.slots) walk(s.nodeId, [...path, s.id], here)
+    const here = [...labels, displayTitle(doc, id, { view })]
+    out.push({ container: n, path, view, label: here.join(' › ') })
+    for (const s of n.slots) walk(s.nodeId, [...path, s.id], slotView(doc, s), here)
   }
-  walk(doc.root, [], [])
+  const root = doc.nodes[doc.root]
+  walk(doc.root, [], root?.type === 'container' ? root.defaultView : 'tabs', [])
   return out
 }
 
@@ -186,12 +205,21 @@ export function makeLeaf(title: string, kind: string, data: unknown): Leaf {
   return { id: newId('n'), type: 'leaf', title, content: { kind, data } }
 }
 
-export function makeContainer(title: string, view: ViewType, viewState: ViewState = {}): Container {
-  return { id: newId('c'), type: 'container', title, view, slots: [], viewState }
+export function makeContainer(title: string, defaultView: ViewType, viewState: ViewState = {}): Container {
+  return { id: newId('c'), type: 'container', title, defaultView, slots: [], viewState }
 }
 
-function activeMetaView(c: Container): SlotMetaView | null {
-  return (SLOT_META_VIEWS as readonly string[]).includes(c.view) ? (c.view as SlotMetaView) : null
+const asMetaView = (view: ViewType): SlotMetaView | null =>
+  (SLOT_META_VIEWS as readonly string[]).includes(view) ? (view as SlotMetaView) : null
+
+export interface InsertOpts {
+  index?: number
+  /** Layout for the parent's *active* view only (other views derive later). */
+  meta?: SlotMeta
+  /** View of the new placement (containers only). Defaults to the node's defaultView. */
+  view?: ViewType
+  /** The view the parent is shown in where this happens (tabs: select the new child). */
+  parentView?: ViewType
 }
 
 /**
@@ -199,27 +227,19 @@ function activeMetaView(c: Container): SlotMetaView | null {
  * *active* view of the target container: the action happens in that view's
  * semantics, so other views get nothing (they will derive a value later).
  */
-export function insertRef(
-  doc: Doc,
-  containerId: NodeId,
-  nodeId: NodeId,
-  opts: { index?: number; meta?: SlotMeta } = {},
-): SlotId | null {
+export function insertRef(doc: Doc, containerId: NodeId, nodeId: NodeId, opts: InsertOpts = {}): SlotId | null {
   const c = getContainer(doc, containerId)
   if (wouldCycle(doc, containerId, nodeId)) return null
+  const node = getNode(doc, nodeId)
   const slot: Slot = { id: newId('s'), nodeId, meta: opts.meta ?? {} }
+  if (node.type === 'container') slot.view = opts.view ?? node.defaultView
   const index = opts.index ?? c.slots.length
   c.slots.splice(Math.max(0, Math.min(index, c.slots.length)), 0, slot)
-  if (c.view === 'tabs') c.viewState.tabs = { ...c.viewState.tabs, active: slot.id }
+  if ((opts.parentView ?? c.defaultView) === 'tabs') c.viewState.tabs = { ...c.viewState.tabs, active: slot.id }
   return slot.id
 }
 
-export function addChild(
-  doc: Doc,
-  containerId: NodeId,
-  node: Node,
-  opts: { index?: number; meta?: SlotMeta } = {},
-): SlotId {
+export function addChild(doc: Doc, containerId: NodeId, node: Node, opts: InsertOpts = {}): SlotId {
   doc.nodes[node.id] = node
   const sid = insertRef(doc, containerId, node.id, opts)
   if (!sid) throw new Error('cycle')
@@ -227,12 +247,7 @@ export function addChild(
 }
 
 /** Mirror = a second reference to the same node (edits are shared). */
-export function mirror(
-  doc: Doc,
-  nodeId: NodeId,
-  intoContainerId: NodeId,
-  opts: { index?: number; meta?: SlotMeta } = {},
-): SlotId | null {
+export function mirror(doc: Doc, nodeId: NodeId, intoContainerId: NodeId, opts: InsertOpts = {}): SlotId | null {
   return insertRef(doc, intoContainerId, nodeId, opts)
 }
 
@@ -276,13 +291,7 @@ export function removeSlot(doc: Doc, containerId: NodeId, slotId: SlotId) {
  * parent, so it is dropped and only `meta` (for the target's active view)
  * is written: an inherently lossy action.
  */
-export function moveSlot(
-  doc: Doc,
-  fromId: NodeId,
-  slotId: SlotId,
-  toId: NodeId,
-  opts: { index?: number; meta?: SlotMeta } = {},
-): SlotId | null {
+export function moveSlot(doc: Doc, fromId: NodeId, slotId: SlotId, toId: NodeId, opts: InsertOpts = {}): SlotId | null {
   const from = getContainer(doc, fromId)
   const slot = findSlot(from, slotId)
   if (fromId === toId) {
@@ -296,12 +305,27 @@ export function moveSlot(
   }
   if (wouldCycle(doc, toId, slot.nodeId)) return null
   removeSlot(doc, fromId, slotId)
-  return insertRef(doc, toId, slot.nodeId, opts)
+  // the placement's view travels with it; its layout meta does not
+  return insertRef(doc, toId, slot.nodeId, { ...opts, view: opts.view ?? slot.view })
 }
 
-/** The lens "put": only the view changes; all per-view metadata is retained. */
-export function setView(doc: Doc, containerId: NodeId, view: ViewType) {
-  getContainer(doc, containerId).view = view
+/**
+ * The lens "put": change how the container at `path` is viewed. Only that
+ * placement changes (other mirrors keep their views), and all per-view
+ * metadata is retained, so switching back round-trips.
+ */
+export function setViewAt(doc: Doc, path: Path, view: ViewType) {
+  const { nodes, slots } = resolvePath(doc, path)
+  const node = nodes[nodes.length - 1]
+  if (node.type !== 'container') return
+  const slot = slots[slots.length - 1]
+  if (slot) slot.view = view
+  else node.defaultView = view
+}
+
+/** Set a container's default view (used by the root and by new placements). */
+export function setDefaultView(doc: Doc, containerId: NodeId, view: ViewType) {
+  getContainer(doc, containerId).defaultView = view
 }
 
 export function setSlotMeta<V extends SlotMetaView>(
@@ -342,10 +366,13 @@ export function wrap(doc: Doc, containerId: NodeId, slotId: SlotId, view: ViewTy
   // titleless by default: it displays the title of what it shows (see titles.ts)
   const box = makeContainer(title ?? '', view)
   doc.nodes[box.id] = box
-  const innerSlot: Slot = { id: newId('s'), nodeId: inner.id, meta: {} }
+  // the inner placement keeps the view it had; the outer one now shows the box
+  const innerSlot: Slot = { id: newId('s'), nodeId: inner.id, meta: {}, view: slot.view }
+  if (inner.type !== 'container') delete innerSlot.view
   box.slots.push(innerSlot)
   box.viewState.tabs = { active: innerSlot.id }
   slot.nodeId = box.id
+  slot.view = view
   return box.id
 }
 
@@ -374,7 +401,14 @@ export type Edge = 'left' | 'right' | 'top' | 'bottom'
  * e.g. a canvas position) is kept and now points at the split. At the root
  * this creates a new root. Returns the new path of the inserted node.
  */
-export function splitBeside(doc: Doc, targetPath: Path, nodeId: NodeId, edge: Edge): Path | null {
+export function splitBeside(
+  doc: Doc,
+  targetPath: Path,
+  nodeId: NodeId,
+  edge: Edge,
+  /** View for the inserted node's new placement (if it is a container). */
+  view?: ViewType,
+): Path | null {
   const { nodes, slots } = resolvePath(doc, targetPath)
   if (slots.length !== targetPath.length) return null
   const target = nodes[nodes.length - 1]
@@ -382,20 +416,27 @@ export function splitBeside(doc: Doc, targetPath: Path, nodeId: NodeId, edge: Ed
   const split = makeContainer('', 'split', {
     split: { direction: edge === 'left' || edge === 'right' ? 'row' : 'column' },
   })
+  // the target keeps the view it had at this position
   const targetSlot: Slot = { id: newId('s'), nodeId: target.id, meta: { split: { size: 1 } } }
+  if (target.type === 'container') targetSlot.view = viewAt(doc, targetPath)
+  const inserted = getNode(doc, nodeId)
   const newSlot: Slot = { id: newId('s'), nodeId, meta: { split: { size: 1 } } }
+  if (inserted.type === 'container') newSlot.view = view ?? inserted.defaultView
   split.slots = edge === 'left' || edge === 'top' ? [newSlot, targetSlot] : [targetSlot, newSlot]
   split.viewState.tabs = { active: newSlot.id }
   doc.nodes[split.id] = split
   if (!slots.length) doc.root = split.id
-  else slots[slots.length - 1].nodeId = split.id
+  else {
+    slots[slots.length - 1].nodeId = split.id
+    slots[slots.length - 1].view = 'split'
+  }
   return [...targetPath, newSlot.id]
 }
 
-/** Write the derived layout for the active view into every slot. */
-export function materialize(doc: Doc, containerId: NodeId) {
+/** Write the derived layout for `view` (the one being shown) into every slot. */
+export function materialize(doc: Doc, containerId: NodeId, shown?: ViewType) {
   const c = getContainer(doc, containerId)
-  const view = activeMetaView(c)
+  const view = asMetaView(shown ?? c.defaultView)
   if (!view) return
   const values = resolvedMeta(c, view)
   c.slots.forEach((s, i) => {
@@ -403,13 +444,14 @@ export function materialize(doc: Doc, containerId: NodeId) {
   })
 }
 
-/** Forget metadata for every view except the active one (explicit lossiness). */
-export function clearOtherViewMeta(doc: Doc, containerId: NodeId) {
+/** Forget metadata for every view except `shown` (explicit lossiness). */
+export function clearOtherViewMeta(doc: Doc, containerId: NodeId, shown?: ViewType) {
   const c = getContainer(doc, containerId)
+  const keep = shown ?? c.defaultView
   for (const s of c.slots) {
-    for (const k of Object.keys(s.meta) as (keyof SlotMeta)[]) if (k !== c.view) delete s.meta[k]
+    for (const k of Object.keys(s.meta) as (keyof SlotMeta)[]) if (k !== keep) delete s.meta[k]
   }
-  for (const k of Object.keys(c.viewState) as (keyof ViewState)[]) if (k !== c.view) delete c.viewState[k]
+  for (const k of Object.keys(c.viewState) as (keyof ViewState)[]) if (k !== keep) delete c.viewState[k]
 }
 
 /** For tabs (and collapsed dock panels) along a path, make it visible. */
@@ -418,10 +460,12 @@ export function reveal(doc: Doc, path: Path) {
   slots.forEach((slot, i) => {
     const parent = nodes[i]
     if (parent.type !== 'container') return
+    // the view this parent is shown in at this point of the path
+    const parentView = i === 0 ? parent.defaultView : slotView(doc, slots[i - 1])
     // only write on change: assigning an equal object still counts as an
     // edit to immer and would add an empty undo step
-    if (parent.view === 'tabs' && parent.viewState.tabs?.active !== slot.id)
+    if (parentView === 'tabs' && parent.viewState.tabs?.active !== slot.id)
       parent.viewState.tabs = { ...parent.viewState.tabs, active: slot.id }
-    if (parent.view === 'dock' && slot.meta.dock?.collapsed) slot.meta.dock.collapsed = false
+    if (parentView === 'dock' && slot.meta.dock?.collapsed) slot.meta.dock.collapsed = false
   })
 }

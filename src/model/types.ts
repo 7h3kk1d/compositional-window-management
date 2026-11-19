@@ -55,9 +55,16 @@ export interface Slot {
   id: SlotId
   nodeId: NodeId
   meta: SlotMeta
+  /**
+   * How this *placement* shows the container it points at. Views are per
+   * reference, not per node: one container mirrored into two places can be
+   * a grid in one and an outline in the other, both live on the same data.
+   * Unset for leaves.
+   */
+  view?: ViewType
 }
 
-/** Per-view state of the container itself. */
+/** Per-view state of the container itself (shared by all its placements). */
 export interface ViewState {
   tabs?: { active?: SlotId }
   split?: { direction: 'row' | 'column' }
@@ -77,7 +84,12 @@ export interface Container {
   id: NodeId
   type: 'container'
   title: string
-  view: ViewType
+  /**
+   * The view used where there is no slot to hold one (the root), and the
+   * starting view for a new placement. Each placement's actual view is
+   * `Slot.view`.
+   */
+  defaultView: ViewType
   /** Shared ordering used by all linear views (tabs, split, grid, document…). */
   slots: Slot[]
   viewState: ViewState
