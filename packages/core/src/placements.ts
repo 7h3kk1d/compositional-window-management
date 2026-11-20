@@ -18,6 +18,8 @@ export const MAX_DEPTH = 24
 /** A container around a placement, outermost first. */
 export interface PlacementContext {
   nodeId: NodeId
+  /** The container's own title ('' when it is automatic). */
+  title: string
   /** How this container is shown at this place. */
   view: ViewType
   /** The container's app-defined payload. */
@@ -88,7 +90,7 @@ function compute(doc: Doc, regionsOf?: RegionsOf) {
         byPath.set(pathKey(path) + '#' + region, p)
       }
       n.slots.forEach((s, index) =>
-        walk(s.nodeId, [...path, s.id], slotView(doc, s), [...ancestors, { nodeId: id, view: v, data: n.data, index }], depth + 1),
+        walk(s.nodeId, [...path, s.id], slotView(doc, s), [...ancestors, { nodeId: id, title: n.title, view: v, data: n.data, index }], depth + 1),
       )
       return
     }

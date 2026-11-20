@@ -91,8 +91,15 @@ export function moveWithin(doc: Doc, path: Path, dir: Dir): Path | null {
       return path
     }
     case 'dock': {
-      const side = ({ left: 'left', right: 'right', down: 'bottom', up: 'main' } as const)[dir]
-      slot.meta.dock = { side, collapsed: false }
+      // up/down step through top · main · bottom; left/right dock to that side
+      const cur = slot.meta.dock?.side ?? 'main'
+      const vertical = ['top', 'main', 'bottom'] as const
+      const vi = vertical.indexOf(cur as (typeof vertical)[number])
+      const side =
+        dir === 'left' || dir === 'right'
+          ? dir
+          : vertical[Math.max(0, Math.min(2, (vi < 0 ? 1 : vi) + (dir === 'up' ? -1 : 1)))]
+      slot.meta.dock = { ...slot.meta.dock, side, collapsed: false }
       return path
     }
     case 'kanban': {

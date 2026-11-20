@@ -46,7 +46,7 @@ export interface Rect {
   z: number
 }
 
-export type DockSide = 'main' | 'left' | 'right' | 'bottom'
+export type DockSide = 'main' | 'left' | 'right' | 'top' | 'bottom'
 
 /** Per-view metadata about one child *in one parent*. */
 export interface SlotMeta {
@@ -55,7 +55,8 @@ export interface SlotMeta {
   split?: { size: number }
   tabs?: { label?: string }
   grid?: { colSpan: number; rowSpan: number }
-  dock?: { side: DockSide; collapsed: boolean }
+  /** `size`: px across the side (a column's width, a row's height); default per side. */
+  dock?: { side: DockSide; collapsed: boolean; size?: number }
   document?: { height: number }
   /**
    * Scrolling tiler: each child is one column, in the shared order. Width is a

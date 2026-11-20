@@ -68,6 +68,12 @@ export interface OpenOptions {
   /** Which existing window counts as "this payload" for 'reuse' (default: same kind and equal data). */
   match?: (data: unknown) => boolean
   title?: string
+  /**
+   * Open next to the most recently focused window of this kind (default: the
+   * kind being opened), e.g. a diff beside the editor it came from, even when
+   * the click came from a panel.
+   */
+  near?: string
 }
 
 /** A content kind the app renders itself: by slot (default) or by a mount function. */
@@ -281,6 +287,13 @@ export class CwmWorkspace extends HTMLElement {
       }
     }
     const leaf = makeLeaf(opts.title ?? '', kind, data)
+    const all = placements(ws.get().doc)
+    const nearKind = opts.near ?? kind
+    const lastNode = this.#lastOfKind.get(nearKind)
+    const near =
+      (lastNode && all.find((p) => p.nodeId === lastNode)?.path) ||
+      all.find((p) => p.type === 'leaf' && p.kind === nearKind)?.path
+    if (near) ws.get().setFocus(near)
     const focus = ws.get().focus
     if (where === 'beside' && focus.length) {
       // beside the focused *window* (not a container that holds the focus)
@@ -295,13 +308,7 @@ export class CwmWorkspace extends HTMLElement {
         return this.#placementAt(ws, path)
       }
     }
-    // next to the last focused window of this kind, if it is still shown
-    const all = placements(ws.get().doc)
-    const lastNode = this.#lastOfKind.get(kind)
-    const near =
-      (lastNode && all.find((p) => p.nodeId === lastNode)?.path) ||
-      all.find((p) => p.type === 'leaf' && p.kind === kind)?.path
-    if (near) ws.get().setFocus(near)
+    // next to the last focused window of that kind (focused above), if any
     const path = addNode(buildCtx(ws), leaf)
     return path ? this.#placementAt(ws, path) : null
   }
@@ -356,6 +363,14 @@ export class CwmWorkspace extends HTMLElement {
       },
       { key: 'patch:' + nodeId },
     )
+  }
+
+  /**
+   * Outline every window of a node (e.g. the container a settings panel
+   * controls) until called again with null.
+   */
+  highlight(nodeId: string | null) {
+    this.#ws?.get().setHighlight(nodeId)
   }
 
   /** Update a window's payload (e.g. after a rename in the app). */
