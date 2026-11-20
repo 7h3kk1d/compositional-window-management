@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Two workspaces</title>
+    <style>
+      html, body { margin: 0; height: 100%; }
+      body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; box-sizing: border-box; }
+      cwm-workspace { height: 100%; }
+    </style>
+  </head>
+  <body>
+    <cwm-workspace id="a"></cwm-workspace>
+    <cwm-workspace id="b"></cwm-workspace>
+    <script type="module">
+      import '@cwm/element'
+      import { addChild, makeContainer, makeLeaf } from '@cwm/core'
+      for (const el of document.querySelectorAll('cwm-workspace')) {
+        const root = makeContainer('', 'split')
+        const doc = { root: root.id, nodes: { [root.id]: root } }
+        for (const t of ['one', 'two', 'three']) addChild(doc, root.id, makeLeaf(`${el.id}-${t}`, 'note', { text: `${el.id} ${t}` }))
+        el.configure({ doc, builtinKinds: ['note'], views: ['split', 'tabs'] })
+      }
+    </script>
+  </body>
+</html>

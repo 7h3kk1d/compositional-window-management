@@ -1,0 +1,21 @@
+{
+  "name": "@cwm/react",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "React renderer for compositional window management: frames, the built-in views, drag and drop, keyboard and the command palette.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./cwm.css": "./src/cwm.css"
+  },
+  "dependencies": {
+    "@cwm/core": "*",
+    "@dnd-kit/core": "^6.3.1",
+    "cmdk": "^1.1.1",
+    "zustand": "^5.1.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

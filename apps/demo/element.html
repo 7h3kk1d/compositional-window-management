@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>cwm-workspace (vanilla)</title>
+    <style>
+      html, body { margin: 0; height: 100%; font: 13px system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; background: #f4f4f1; }
+      header { padding: 6px 12px; display: flex; gap: 8px; align-items: center; }
+      cwm-workspace { flex: 1; }
+      .term { flex: 1; display: flex; flex-direction: column; padding: 6px; gap: 4px; }
+      .term textarea { flex: 1; font: 12px ui-monospace, monospace; border: 1px solid #ccc; border-radius: 4px; padding: 6px; }
+      .term .ctx { color: #888; font-size: 11px; }
+      .region { display: flex; gap: 8px; align-items: center; padding: 4px 8px; background: #fff8e0; border-radius: 6px; flex: 1; }
+      iframe { flex: 1; border: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>&lt;cwm-workspace&gt;</b> with an app written in plain DOM
+      <button id="open-a">open term “main”</button>
+      <button id="open-b">open “util” beside</button>
+    </header>
+    <cwm-workspace id="ws"></cwm-workspace>
+    <script type="module" src="./examples/vanilla.ts"></script>
+  </body>
+</html>

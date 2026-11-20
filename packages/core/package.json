@@ -1,0 +1,13 @@
+{
+  "name": "@cwm/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Compositional window management: the document model (a DAG of containers and leaves), ops, and a framework-free store.",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "immer": "^11.2.10",
+    "nanoid": "^5.1.16",
+    "zustand": "^5.1.0"
+  }
+}
