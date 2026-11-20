@@ -514,7 +514,7 @@ kbd {
   min-height: 0;
 }
 .dock-col {
-  width: 300px;
+  width: 340px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -535,7 +535,7 @@ kbd {
   gap: 6px;
 }
 .dock-row {
-  height: 180px;
+  height: 260px;
   flex: none;
   display: flex;
   gap: 6px;
@@ -1496,15 +1496,129 @@ button.toggle.on {
 .driver-popover.cwm-tour .driver-popover-arrow-side-bottom.driver-popover-arrow {
   border-bottom-color: var(--surface);
 }
-.tour-button {
+.round-button {
+  box-sizing: border-box;
   width: 26px;
   height: 26px;
   border-radius: 50%;
   font-weight: 600;
+}
+.info-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  text-decoration: none;
 }
 /* a ring around the spotlighted element, so it reads in dark mode too */
 .driver-active .driver-active-element:not(.driver-dummy-element) {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 6px;
+}
+
+/* ------------------------------------------------------------ ink */
+/* Ink has no chrome: marks sit straight on what's behind, and clicks pass
+   through (so a canvas still pans) until you pick "✎ Draw". */
+.frame.kind-ink {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+.frame.kind-ink > .frame-header {
+  pointer-events: auto;
+  opacity: 0;
+  background: transparent;
+  border-bottom-color: transparent;
+  transition: opacity 0.15s;
+}
+.frame.kind-ink > .frame-header:hover,
+.frame.kind-ink.focused > .frame-header {
+  opacity: 1;
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.frame.kind-ink.focused {
+  outline: 1px dashed var(--accent);
+}
+.canvas-item:has(> .frame.kind-ink),
+.tl-item:has(> .frame.kind-ink) {
+  box-shadow: none;
+  pointer-events: none;
+}
+.canvas-item:has(> .frame.kind-ink) .resize-handle {
+  pointer-events: auto;
+}
+.ink-root {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  color: var(--text);
+}
+.ink-svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.ink-root.drawing .ink-svg {
+  pointer-events: auto;
+}
+.ink-root.drawing {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  border-radius: var(--radius);
+}
+.ink-label {
+  font-family: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
+  font-weight: 600;
+  user-select: none;
+}
+.ink-typing {
+  position: absolute;
+  font-family: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
+  font-size: 22px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed currentColor;
+  outline: none;
+  width: 220px;
+  pointer-events: auto;
+}
+.ink-toolbar {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 8px;
+  pointer-events: auto;
+  opacity: 0.25;
+  transition: opacity 0.15s;
+}
+.ink-toolbar:hover,
+.ink-root.drawing .ink-toolbar {
+  opacity: 1;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ink-toolbar .on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.ink-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+  padding: 0;
+}
+.ink-swatch.on {
+  box-shadow: 0 0 0 2px var(--accent);
 }

@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getContainer, setSlotMeta, setViewState } from '../model/ops'
 import { act, useStore } from '../model/store'
 import { dayIso, dayNum, dayWidthOf, DERIVED_SPAN_DAYS, isDerived, timelineMeta, todayNum } from '../model/viewMeta'
 import { Child, startPointerDrag, useDropAdapter, type ViewProps } from './NodeView'
 
 const AXIS_H = 40
-const ROW_H = 210
+const ROW_MIN = 120
+const ROW_MAX = 260
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -44,6 +45,16 @@ export function TimelineView({ container, path, depth }: ViewProps) {
   const days = last - first + 1
   const rows = packRows(spans)
   const nRows = Math.max(1, ...rows.map((r) => r + 1))
+  // rows share the height that's there (within limits), so a short panel needs no scrolling
+  const [height, setHeight] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setHeight(el.clientHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const ROW_H = Math.max(ROW_MIN, Math.min(ROW_MAX, Math.floor((height - AXIS_H - 14) / nRows) || ROW_MAX))
 
   useDropAdapter(path, (x) => {
     const el = ref.current!

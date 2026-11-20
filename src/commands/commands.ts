@@ -31,6 +31,8 @@ import {
 } from '../model/ops'
 import { seedDoc } from '../model/seed'
 import { KEYMAP } from './keymap'
+
+const LOCAL_LAYOUTS = import.meta.glob<{ title: string; seed: () => Doc }>('../model/*.local.ts', { eager: true })
 import { centerFocused, stackOrExpel, toggleTabs } from './keys'
 import { resizeWindow } from '../model/moves'
 import { startTour } from '../tour/tour'
@@ -538,6 +540,13 @@ export function rootItems(ctx: Ctx): Item[] {
       group: 'Data',
       run: () => useStore.getState().replaceDoc(seedDoc()),
     },
+    // local-only layouts (git-ignored *.local.ts files), absent from the published build
+    ...Object.entries(LOCAL_LAYOUTS).map(([file, m]) => ({
+      id: 'layout-' + file,
+      title: `Load layout: ${m.title}`,
+      group: 'Data',
+      run: () => useStore.getState().replaceDoc(m.seed()),
+    })),
     {
       id: 'tour',
       title: 'Take the tour',

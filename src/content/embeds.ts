@@ -14,6 +14,8 @@ export interface Embed {
   srcdoc?: string
   /** Sites that refuse to be framed: shown as a link instead. */
   blocked?: boolean
+  /** Chrome won't show PDFs in a sandboxed frame; its PDF viewer is sandboxed itself. */
+  unsandboxed?: boolean
 }
 
 /** Accepts a bare URL, a URL without scheme, or a pasted `<iframe src=…>` embed code. */
@@ -21,7 +23,8 @@ export function normalizeUrl(input: string): string {
   let s = input.trim()
   const m = s.match(/<iframe[^>]*\ssrc=["']([^"']+)["']/i)
   if (m) s = m[1].replace(/&amp;/g, '&')
-  if (s && !/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s
+  // a path on this site (e.g. /local/…) stays as it is; anything else without a scheme is a web address
+  if (s && !s.startsWith('/') && !/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s
   return s
 }
 
@@ -33,7 +36,7 @@ const seconds = (t: string | null) => {
 }
 
 /** Hosts known to forbid framing (X-Frame-Options / frame-ancestors). */
-const BLOCKED = ['github.com', 'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'reddit.com', 'news.ycombinator.com']
+const BLOCKED = ['github.com', 'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'reddit.com', 'news.ycombinator.com', 'unison-lang.org']
 
 type Recipe = (u: URL, path: string[]) => Embed | null
 
@@ -168,6 +171,7 @@ const RECIPES: [RegExp, Recipe][] = [
 
 export function resolveEmbed(raw: string): Embed {
   const href = normalizeUrl(raw)
+  if (/\.pdf$/i.test(href.split(/[?#]/)[0])) return { provider: 'PDF', src: href, unsandboxed: true }
   let u: URL
   try {
     u = new URL(href)

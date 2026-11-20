@@ -92,7 +92,7 @@ function Frame({
 
   return (
     <section
-      className={`frame ${node.type} ${focused ? 'focused' : ''} ${flashing ? 'flash' : ''} ${
+      className={`frame ${node.type} ${node.type === 'leaf' ? 'kind-' + node.content.kind : ''} ${focused ? 'focused' : ''} ${flashing ? 'flash' : ''} ${
         derived ? 'derived' : ''} ${bare ? 'bare' : ''
       } ${drag.isDragging ? 'dragging' : ''} ${className}`}
       style={style}

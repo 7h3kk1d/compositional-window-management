@@ -148,7 +148,17 @@ export default function App() {
             ⌫ {orphans} closed
           </button>
         )}
-        <button className="ghost tour-button" onClick={startTour} title="Take the tour">
+        <a
+          className="ghost round-button info-link"
+          href="https://bandukwala.me/on-compositional-window-management/"
+          target="_blank"
+          rel="noopener"
+          title="Read the essay: On Compositional Window Management"
+          aria-label="About: read the original essay"
+        >
+          i
+        </a>
+        <button className="ghost round-button tour-button" onClick={startTour} title="Take the tour">
           ?
         </button>
         <button className="palette-button" onClick={() => useStore.getState().openPalette()}>

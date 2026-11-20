@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FC } from 'react'
 import { EMBED_EXAMPLES, normalizeUrl, resolveEmbed } from './embeds'
 import { HtmlWidget, WIDGET_TEMPLATES } from './htmlWidget'
+import { INK_PRESETS, Ink } from './ink'
 
 export interface ContentProps<D> {
   data: D
@@ -117,7 +118,9 @@ function Embed({ data, update }: ContentProps<IframeData>) {
           srcDoc={embed.srcdoc}
           title={data.url}
           sandbox={
-            embed.srcdoc
+            embed.unsandboxed
+              ? undefined
+              : embed.srcdoc
               ? 'allow-scripts allow-popups'
               : 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-popups-to-escape-sandbox'
           }
@@ -259,6 +262,14 @@ export const CONTENT_KINDS: ContentKind[] = [
     icon: '■',
     create: () => ({ color: SWATCHES[Math.floor(Math.random() * SWATCHES.length)], label: '' }),
     Render: Placeholder,
+  },
+  {
+    id: 'ink',
+    label: 'Ink',
+    icon: '✐',
+    create: () => ({ strokes: [], labels: [] }),
+    Render: Ink,
+    presets: INK_PRESETS.map((p) => ({ id: p.id, label: p.label, data: p.data })),
   },
   { id: 'clock', label: 'Clock', icon: '◷', create: () => ({}), Render: Clock },
   { id: 'todo', label: 'Todo list', icon: '☑', create: () => ({ items: [] }), Render: Todo },

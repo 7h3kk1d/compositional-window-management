@@ -36,8 +36,26 @@ export function ScrollView({ container, path, depth }: ViewProps) {
     s.focus.length > path.length && path.every((p, i) => s.focus[i] === p) ? s.focus[path.length] : null,
   )
   useEffect(() => {
-    if (focusedSlot) scrollToColumn(ref.current, focusedSlot, center)
+    // centered strips open on their first column rather than on the empty margin
+    const target = focusedSlot ?? (center ? container.slots[0]?.id : undefined)
+    if (target) scrollToColumn(ref.current, target, center, !!focusedSlot)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedSlot, center])
+
+  // a centered strip stays centered when it is resized or first shown (e.g. its tab opens)
+  const latest = useRef({ focusedSlot, center, first: container.slots[0]?.id })
+  latest.current = { focusedSlot, center, first: container.slots[0]?.id }
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      const { focusedSlot: f, center: c, first } = latest.current
+      const target = f ?? first
+      if (c && target && el.clientWidth) scrollToColumn(el, target, true, false)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // between columns by pointer x
   useDropAdapter(path, (x) => {
