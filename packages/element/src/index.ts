@@ -74,6 +74,14 @@ export interface OpenOptions {
    * the click came from a panel.
    */
   near?: string
+  /**
+   * Keep the new window inside this container (a node id): "near" is looked
+   * for only among its descendants, and failing that the new window opens next
+   * to any window inside it. For an app whose containers are scopes (a
+   * column per document, say), so opening something from one scope never
+   * lands it in another.
+   */
+  within?: string
 }
 
 /** A content kind the app renders itself: by slot (default) or by a mount function. */
@@ -290,9 +298,11 @@ export class CwmWorkspace extends HTMLElement {
     const all = placements(ws.get().doc)
     const nearKind = opts.near ?? kind
     const lastNode = this.#lastOfKind.get(nearKind)
+    const inside = (p: Placement) => !opts.within || p.ancestors.some((a) => a.nodeId === opts.within)
     const near =
-      (lastNode && all.find((p) => p.nodeId === lastNode)?.path) ||
-      all.find((p) => p.type === 'leaf' && p.kind === nearKind)?.path
+      (lastNode && all.find((p) => p.nodeId === lastNode && inside(p))?.path) ||
+      all.find((p) => p.type === 'leaf' && p.kind === nearKind && inside(p))?.path ||
+      (opts.within ? all.find((p) => p.type === 'leaf' && inside(p))?.path : undefined)
     if (near) ws.get().setFocus(near)
     const focus = ws.get().focus
     if (where === 'beside' && focus.length) {
