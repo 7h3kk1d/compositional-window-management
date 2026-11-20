@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:shell": "tsc -b && vite build -c vite.shell.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -21,6 +22,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@domicile-desktop/sdk": "^0.0.0-alpha-8b3c03cd4646",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

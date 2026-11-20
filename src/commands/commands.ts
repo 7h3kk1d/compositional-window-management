@@ -2,7 +2,7 @@
  * One command registry drives the palette, keyboard shortcuts and frame
  * buttons: the essay's "one set of window controls" for every container.
  */
-import { CONTENT_KINDS } from '../content/registry'
+import { CONTENT_KINDS, contentKind } from '../content/registry'
 import {
   addChild,
   allContainers,
@@ -18,6 +18,7 @@ import {
   moveSlot,
   occurrences,
   purgeOrphans,
+  refCount,
   resolvePath,
   rename,
   reveal,
@@ -472,6 +473,9 @@ export function rootItems(ctx: Ctx): Item[] {
       shortcut: '⌥W',
       keywords: ['remove', 'delete'],
       run: (x) => {
+        const { node } = x
+        const close = node.type === 'leaf' && refCount(x.doc, node.id) === 1 ? contentKind(node.content.kind)?.close : undefined
+        if (close && node.type === 'leaf') return close(node.content.data)
         act((d) => {
           const p = getContainer(d, x.parent!.id)
           const i = p.slots.findIndex((s) => s.id === x.slot!.id)

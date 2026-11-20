@@ -18,6 +18,12 @@ export interface ContentKind<D = any> {
   inline?: boolean
   /** Ready-made starting points, listed separately in "Add child". */
   presets?: { id: string; label: string; data: () => D }[]
+  /**
+   * Closing the leaf's last placement runs this instead of removing it, for
+   * content that lives outside the document (a native window): the owner
+   * removes the leaf once the thing itself has gone.
+   */
+  close?(data: D): void
 }
 
 // ------------------------------------------------------------ note
