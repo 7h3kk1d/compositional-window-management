@@ -15,6 +15,60 @@ npm test        # model tests (lens round-trips, mirroring, cycles)
 A guided tour starts on the first visit (`src/tour/tour.ts`, built on driver.js). Replay it with the **?** button
 or ⌘K → "Take the tour". Steps that need demo content your layout lacks are skipped.
 
+## As a Wayland desktop (Domicile)
+
+[Domicile](https://www.domicile-desktop.com/) is a Wayland compositor that is a patched Chromium: each native window
+is an `<app>` element, sized and placed by its layout box. Loaded as a Domicile shell, this app manages real windows:
+each one becomes a leaf (`src/domicile/`), so every view (tabs, canvas, kanban, …) lays it out like any pane.
+
+### Try it
+
+You need Linux with a Wayland session running (the desktop opens as a window inside it), Node.js and npm, and
+[Alacritty](https://alacritty.org/) if you want Super+Return to open a terminal.
+
+1. Install Domicile from its [install page](https://www.domicile-desktop.com/docs/install) (packages for Debian,
+   Ubuntu, Fedora, openSUSE and Arch). With Nix instead:
+
+   ```sh
+   nix build github:cprussin/domicile/release#domicile --accept-flake-config -o domicile
+   export PATH="$PWD/domicile/bin:$PATH"
+   ```
+
+   The prebuilt Chromium comes from Domicile's binary cache, which Nix only uses for a
+   [trusted user](https://nix.dev/manual/nix/latest/command-ref/conf-file#conf-trusted-users); otherwise Nix
+   compiles Chromium itself, which takes hours.
+
+2. Build the shell and start it:
+
+   ```sh
+   git clone https://github.com/7h3kk1d/compositional-window-management
+   cd compositional-window-management
+   npm install
+   npm run build:shell
+   domicile ./dist-shell/shell.js
+   ```
+
+3. A window opens with the desktop in it. Press **Super+Return** for a terminal and launch apps from there; each
+   new window gets a pane beside the focused one. Close the Domicile window to quit.
+
+After changing the code, run `npm run build:shell` and then, from a terminal *inside* the desktop,
+`domicile load-shell ./dist-shell/shell.js`: the new build loads and open windows stay.
+
+### Keys
+
+The ⌥ keys move to **Super**, since a focused app would take ⌥ itself: Super+arrows moves focus and Super+Shift+arrows moves the window, Super+1…9
+switches the view, Super+W closes, Super+K / P / Z are the palette, go-to and undo (⌘K / ⌘P / ⌘Z in the browser).
+Super+Return opens a terminal, so "go into container" is Super+Shift+Return.
+
+### How it behaves
+
+- Closing an app removes its pane, and Super+W on a window's last pane closes the app.
+- Menus and tooltips are drawn in a page-level layer over their window, so a pane edge doesn't clip them.
+- A mirrored window renders in every placement, but a client has one size: the most recently laid-out placement sets
+  it, and the others show a crop.
+- `globalThis.cwm` exposes the store and key handler for driving the desktop over DevTools
+  (`DOMICILE_ENGINE_ARGS=--remote-debugging-port=…`).
+
 ## Ideas in the code
 
 - **Layout lives on the edge** (`Slot.meta`, `src/model/types.ts`). The same node can be mirrored into several
