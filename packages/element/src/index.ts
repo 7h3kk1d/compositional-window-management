@@ -337,6 +337,27 @@ export class CwmWorkspace extends HTMLElement {
     })
   }
 
+  /**
+   * Merge fields into a window's or container's payload (a field set to
+   * null is removed): e.g. pin one setting of a window, or change a default
+   * a container gives its children.
+   */
+  patchData(nodeId: string, patch: Record<string, unknown>) {
+    this.#ws?.act(
+      (d) => {
+        const n = d.nodes[nodeId]
+        if (!n) return
+        const cur = (n.type === 'leaf' ? n.content.data : n.data) ?? {}
+        const next: Record<string, unknown> = { ...(cur as Record<string, unknown>) }
+        for (const [k, v] of Object.entries(patch)) if (v === null) delete next[k]
+        else next[k] = v
+        if (n.type === 'leaf') n.content.data = next
+        else n.data = next
+      },
+      { key: 'patch:' + nodeId },
+    )
+  }
+
   /** Update a window's payload (e.g. after a rename in the app). */
   setData(nodeId: string, data: unknown) {
     this.#ws?.act((d) => {
