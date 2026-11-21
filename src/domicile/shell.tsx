@@ -20,6 +20,7 @@ import { APP_KIND, closeApp, connect, focusedApp, setFullscreen, useDesktop, typ
 import { openLauncher, setupLauncher, TERMINAL } from './launcher'
 import { Overlays } from './Overlays'
 import { registerRootItems } from '../commands/commands'
+import { TOUR_KEY } from '../tour/tour'
 import * as ops from '../model/ops'
 import { useStore } from '../model/store'
 
@@ -87,6 +88,12 @@ export const Shell = (root: HTMLElement, domicile: Domicile) => {
     Render: AppPane,
     close: ({ appId }: AppData) => closeApp(appId),
   })
+  // A desktop session isn't a first visit: no tour over the login (⌘K › "Take the tour" still runs it).
+  try {
+    localStorage.setItem(TOUR_KEY, 'desktop')
+  } catch {
+    // storage refused: maybeStartTour then treats the tour as seen anyway
+  }
   connect(domicile)
   bindKeys(domicile)
   setupLauncher(domicile)
