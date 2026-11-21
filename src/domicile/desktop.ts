@@ -13,7 +13,7 @@
  */
 import type { ClientWindow } from '@domicile-desktop/sdk/desktop/windows'
 import type { Domicile } from '@domicile-desktop/sdk/shell'
-import { WindowState } from '@domicile-desktop/sdk/window-state'
+import { WindowRequestKind, WindowState } from '@domicile-desktop/sdk/window-state'
 import { produce } from 'immer'
 import { create } from 'zustand'
 import { addTarget, buildCtx } from '../commands/commands'
@@ -43,9 +43,17 @@ interface DesktopState {
    */
   listed: boolean
   focused: string | undefined
+  /** The window shown over the whole screen, as its client asked or Super+F did. */
+  fullscreen: string | undefined
 }
 
-export const useDesktop = create<DesktopState>(() => ({ domicile: null, windows: null, listed: false, focused: undefined }))
+export const useDesktop = create<DesktopState>(() => ({
+  domicile: null,
+  windows: null,
+  listed: false,
+  focused: undefined,
+  fullscreen: undefined,
+}))
 
 const appDataOf = (n: Doc['nodes'][NodeId] | undefined): AppData | undefined =>
   n?.type === 'leaf' && n.content.kind === APP_KIND ? (n.content.data as AppData) : undefined
@@ -54,6 +62,13 @@ const identity = ({ appId, pid }: AppData) => `${appId}#${pid ?? ''}`
 const windowData = (w: ClientWindow): AppData => ({ appId: w.appId, pid: w.pid ?? null })
 
 const isToplevel = (w: ClientWindow) => w.parent === undefined
+/**
+ * Windows that get a pane. A dialog (a client that gave its window a parent
+ * or a fixed size: file choosers, prompts, pinentry) floats over the desktop
+ * at the size it drew instead; see `Overlays.tsx`.
+ */
+export const isTiled = (w: ClientWindow) => isToplevel(w) && !w.dialog
+export const isFloating = (w: ClientWindow) => isToplevel(w) && w.dialog
 
 /** Doc edits made to follow the compositor skip undo history: undoing one would only be re-synced. */
 const edit = (fn: (d: Doc) => void) => {
@@ -81,7 +96,7 @@ function sync() {
 function syncPass() {
   const { windows, listed } = useDesktop.getState()
   if (!windows) return
-  const open = new Map(windows.filter(isToplevel).map((w) => [identity(windowData(w)), w]))
+  const open = new Map(windows.filter(isTiled).map((w) => [identity(windowData(w)), w]))
   const { doc } = useStore.getState()
   const live = reachable(doc)
 
@@ -157,27 +172,93 @@ function pullFocus() {
  */
 const TILED = [WindowState.TiledLeft, WindowState.TiledRight, WindowState.TiledTop, WindowState.TiledBottom]
 
+/** Show `appId` over the whole screen, or put it back in its pane (`undefined`). */
+export function setFullscreen(appId: string | undefined) {
+  const { domicile, fullscreen } = useDesktop.getState()
+  if (!domicile || appId === fullscreen) return
+  if (fullscreen !== undefined) void domicile.windows.setStates(fullscreen, TILED)
+  if (appId !== undefined) void domicile.windows.setStates(appId, [WindowState.Fullscreen])
+  useDesktop.setState({ fullscreen: appId })
+}
+
+/** The app in the focused pane, if any. */
+export function focusedApp(): string | undefined {
+  const { doc, focus } = useStore.getState()
+  const { nodes } = resolvePath(doc, focus)
+  return appIdOf(nodes[nodes.length - 1])
+}
+
+/**
+ * Grants a client's fullscreen requests (a video, a game, F11) and ignores
+ * maximize: a tiled window already fills its pane.
+ */
+async function followRequests(domicile: Domicile, signal: { stopped: boolean }) {
+  const listening = await domicile.windows.requests()
+  listening.match({
+    Err: async (error) => console.warn('[cwm] window requests unavailable:', error.message),
+    Ok: async ({ items, stop }) => {
+      if (signal.stopped) return stop()
+      const reader = items.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done || signal.stopped) return stop()
+        if (value.kind === WindowRequestKind.Fullscreen) setFullscreen(value.appId)
+        else if (value.kind === WindowRequestKind.Unfullscreen && useDesktop.getState().fullscreen === value.appId)
+          setFullscreen(undefined)
+      }
+    },
+  })
+}
+
+/**
+ * A client asked for the keyboard (a link opened in a running browser, a
+ * dialog): reveal and focus its pane, or give it the keyboard if it floats.
+ */
+function grantFocus(domicile: Domicile, appId: string) {
+  const w = domicile.windows.list.find((x) => x.appId === appId)
+  if (!w) return
+  if (isFloating(w)) return domicile.windows.focus(appId)
+  const { doc } = useStore.getState()
+  const leaf = [...reachable(doc)].find((id) => appIdOf(doc.nodes[id]) === appId)
+  const path = leaf && occurrences(doc, leaf, 1)[0]
+  if (!path) return
+  edit((d) => reveal(d, path))
+  useStore.getState().setFocus(path)
+  domicile.windows.focus(appId)
+}
+
 export function connect(domicile: Domicile): () => void {
   const tiled = new Set<string>()
   const tile = () => {
     for (const w of domicile.windows.list ?? [])
-      if (isToplevel(w) && !tiled.has(w.appId)) {
+      if (isTiled(w) && !tiled.has(w.appId)) {
         tiled.add(w.appId)
         void domicile.windows.setStates(w.appId, TILED)
       }
   }
   const read = (listed: boolean) => {
     tile()
+    const windows = domicile.windows.list ?? null
+    const floating = windows?.filter(isFloating).map((w) => w.appId) ?? []
+    const before = new Set(useDesktop.getState().windows?.filter(isFloating).map((w) => w.appId))
     useDesktop.setState((s) => ({
       domicile,
-      windows: domicile.windows.list ?? null,
+      windows,
       focused: domicile.windows.focused,
       listed: s.listed || listed,
+      fullscreen: windows?.some((w) => w.appId === s.fullscreen) ? s.fullscreen : undefined,
     }))
+    // A new dialog takes the keyboard, as it would on any desktop.
+    const opened = floating.filter((id) => !before.has(id))
+    if (listed && opened.length) domicile.windows.focus(opened[opened.length - 1])
   }
   read(false)
   sync()
+  const signal = { stopped: false }
+  followRequests(domicile, signal).catch((e: unknown) => console.warn('[cwm] window requests stopped:', e))
   const offs = [
+    () => (signal.stopped = true),
+    domicile.windows.on('focusrequest', (appId) => grantFocus(domicile, appId)),
     domicile.windows.on('change', () => {
       read(true)
       sync()

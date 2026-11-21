@@ -13,15 +13,15 @@ import { createRoot } from 'react-dom/client'
 import App from '../App'
 import { onGlobalKeyDown } from '../commands/keys'
 import { registerContentKind } from '../content/registry'
-import css from '../index.css?inline'
-// Domicile serves only the module, so stylesheets travel inside it.
-import tourCss from 'driver.js/dist/driver.css?inline'
+// Domicile serves only the module: the build inlines every stylesheet into it (vite.shell.config.ts).
+import '../index.css'
 import { AppPane } from './AppPane'
-import { APP_KIND, closeApp, connect, useDesktop, type AppData } from './desktop'
+import { APP_KIND, closeApp, connect, focusedApp, setFullscreen, useDesktop, type AppData } from './desktop'
+import { openLauncher, setupLauncher, TERMINAL } from './launcher'
+import { Overlays } from './Overlays'
+import { registerRootItems } from '../commands/commands'
 import * as ops from '../model/ops'
 import { useStore } from '../model/store'
-
-const TERMINAL = ['alacritty']
 
 /** keysym → the KeyboardEvent `code`/`key` the app's handler reads. */
 const KEYS: Record<string, [code: string, key: string]> = {
@@ -59,12 +59,17 @@ function bindKeys(domicile: Domicile) {
   // Super+Return is the terminal, as in most tiling WMs; "go into container" moves to Super+Shift+Return.
   handlers.set('Meta+Return', () => domicile.processes.launch(TERMINAL))
   handlers.set('Meta+Shift+Return', () => replay('Enter', 'Enter', { altKey: true }))
+  handlers.set('Meta+space', openLauncher)
+  handlers.set('Meta+d', openLauncher)
+  handlers.set('Meta+f', toggleFullscreen)
+  handlers.set('Meta+l', () => domicile.session.lock())
 
   for (const chord of handlers.keys()) kb.grab(chord)
   const off = kb.on('shortcut', ({ chord }) => {
     // The replayed handlers act on whatever has focus, which the page's own
     // focus tracking already mirrors; palette/text input needs the keyboard.
-    if (['Meta+k', 'Meta+p'].includes(chord)) domicile.windows.focusShell()
+    if (domicile.session.locked === true) return
+    if (['Meta+k', 'Meta+p', 'Meta+space', 'Meta+d'].includes(chord)) domicile.windows.focusShell()
     handlers.get(chord)?.()
   })
   return () => {
@@ -74,9 +79,6 @@ function bindKeys(domicile: Domicile) {
 }
 
 export const Shell = (root: HTMLElement, domicile: Domicile) => {
-  const style = document.createElement('style')
-  style.textContent = css + tourCss
-  document.head.append(style)
   registerContentKind({
     id: APP_KIND,
     label: 'Native window',
@@ -87,6 +89,13 @@ export const Shell = (root: HTMLElement, domicile: Domicile) => {
   })
   connect(domicile)
   bindKeys(domicile)
+  setupLauncher(domicile)
+  registerDesktopCommands(domicile)
+  // The palette took the keyboard; closing it hands it back to the focused window.
+  useStore.subscribe((s, prev) => {
+    const app = focusedApp()
+    if (prev.paletteOpen && !s.paletteOpen && app !== undefined) domicile.windows.focus(app)
+  })
   // Handles for driving the desktop from DevTools (DOMICILE_ENGINE_ARGS=--remote-debugging-port=…).
   Object.assign(globalThis, { cwm: { domicile, useStore, useDesktop, ops, key: onGlobalKeyDown } })
   // Domicile shows the page once Shell returns, so the first frame must be drawn by then.
@@ -94,7 +103,62 @@ export const Shell = (root: HTMLElement, domicile: Domicile) => {
     createRoot(root).render(
       <StrictMode>
         <App />
+        <Overlays domicile={domicile} />
       </StrictMode>,
     ),
   )
+}
+
+/** Super+F: the focused window over the whole screen, and back. */
+function toggleFullscreen() {
+  const { fullscreen } = useDesktop.getState()
+  setFullscreen(fullscreen !== undefined ? undefined : focusedApp())
+}
+
+function registerDesktopCommands(domicile: Domicile) {
+  registerRootItems(() => [
+    {
+      id: 'fullscreen',
+      title: useDesktop.getState().fullscreen ? 'Leave full screen' : 'Full screen',
+      group: 'Desktop',
+      keywords: ['maximize', 'zoom', 'fill'],
+      shortcut: 'Super+F',
+      run: toggleFullscreen,
+    },
+    {
+      id: 'lock',
+      title: 'Lock screen',
+      group: 'Desktop',
+      keywords: ['away', 'password', 'secure'],
+      shortcut: 'Super+L',
+      run: () => domicile.session.lock(),
+    },
+    {
+      id: 'app-titlebars',
+      title: document.body.classList.contains('app-headers-shown') ? 'Auto-hide window title bars' : 'Always show window title bars',
+      group: 'Desktop',
+      keywords: ['header', 'decorations', 'frame', 'chrome'],
+      run: () => toggleAppHeaders(),
+    },
+  ])
+  toggleAppHeaders(readPref())
+}
+
+// App panes hide CWM's title bar to a thin strip (most apps draw their own);
+// hovering the strip shows it. The choice is per machine.
+const PREF = 'cwm.appHeaders'
+const readPref = () => {
+  try {
+    return localStorage.getItem(PREF) === 'shown'
+  } catch {
+    return false
+  }
+}
+function toggleAppHeaders(shown = !document.body.classList.contains('app-headers-shown')) {
+  document.body.classList.toggle('app-headers-shown', shown)
+  try {
+    localStorage.setItem(PREF, shown ? 'shown' : 'auto')
+  } catch {
+    // per-viewer convenience only
+  }
 }

@@ -31,7 +31,7 @@ function PopupTree({ parent, all }: { parent: string; all: readonly ClientWindow
  * live in a page-level layer laid over the window's on-screen box (scaled by
  * any canvas zoom) and follow it each frame while open.
  */
-function Popups({ appId, anchor, all }: { appId: string; anchor: RefObject<HTMLElement | null>; all: readonly ClientWindow[] }) {
+export function Popups({ appId, anchor, all }: { appId: string; anchor: RefObject<HTMLElement | null>; all: readonly ClientWindow[] }) {
   const layer = useRef<HTMLDivElement>(null)
   const open = all.some((w) => w.parent === appId)
   useLayoutEffect(() => {
@@ -82,6 +82,7 @@ function trackMirror(appId: string) {
 
 export function AppPane({ data }: ContentProps<AppData>) {
   const windows = useDesktop((s) => s.windows)
+  const fullscreen = useDesktop((s) => s.fullscreen === data.appId)
   const anchor = useRef<HTMLElement | null>(null)
   const ref = useMemo(() => {
     const track = trackMirror(data.appId)
@@ -92,6 +93,21 @@ export function AppPane({ data }: ContentProps<AppData>) {
   }, [data.appId])
   if (!windows) return <div className="app-missing">Native windows need Domicile (see README).</div>
   if (!windows.some((w) => w.appId === data.appId)) return <div className="app-missing">Window closed</div>
+  // Out of the layout (and any canvas zoom) onto the page itself; the pane
+  // keeps its place for when it comes back.
+  if (fullscreen)
+    return (
+      <>
+        <div className="app-missing">Full screen (Super+F)</div>
+        {createPortal(
+          <div className="app-kind app-fullscreen">
+            <app app-id={data.appId} ref={ref} />
+            <Popups appId={data.appId} anchor={anchor} all={windows} />
+          </div>,
+          document.body,
+        )}
+      </>
+    )
   return (
     <div className="app-kind">
       <app app-id={data.appId} ref={ref} />

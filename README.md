@@ -30,13 +30,13 @@ You need Linux with a Wayland session running (the desktop opens as a window ins
    Ubuntu, Fedora, openSUSE and Arch). With Nix instead:
 
    ```sh
-   nix build github:cprussin/domicile/release#domicile --accept-flake-config -o domicile
+   nix build github:cprussin/domicile/release#domicile -o domicile
    export PATH="$PWD/domicile/bin:$PATH"
    ```
 
-   The prebuilt Chromium comes from Domicile's binary cache, which Nix only uses for a
-   [trusted user](https://nix.dev/manual/nix/latest/command-ref/conf-file#conf-trusted-users); otherwise Nix
-   compiles Chromium itself, which takes hours.
+   The engine (Domicile's Chromium) is a prebuilt download from its GitHub releases; Nix builds only the
+   compositor and the bundled shells, which takes a few minutes. On NixOS, `nixosModules.default` adds a `domicile`
+   login session (see `programs.domicile`).
 
 2. Build the shell and start it:
 
@@ -60,12 +60,27 @@ The ⌥ keys move to **Super**, since a focused app would take ⌥ itself: Super
 switches the view, Super+W closes, Super+K / P / Z are the palette, go-to and undo (⌘K / ⌘P / ⌘Z in the browser).
 Super+Return opens a terminal, so "go into container" is Super+Shift+Return.
 
+| Key | Does |
+|---|---|
+| Super+Space (or Super+D) | Launch app: installed desktop entries, searched in the palette (⌘K › "Launch app…") |
+| Super+F | The focused window full screen, and back (apps asking for fullscreen get it too) |
+| Super+L | Lock |
+
 ### How it behaves
 
 - Closing an app removes its pane, and Super+W on a window's last pane closes the app.
+- A window's pane hides CWM's title bar to a thin strip along its top, since most apps draw their own; hover the strip
+  to drag, retitle or close the pane. ⌘K › "Always show window title bars" keeps it open.
+- Dialogs (file choosers, prompts: windows with a parent or a fixed size) float centered at their own size instead of
+  taking a pane.
 - Menus and tooltips are drawn in a page-level layer over their window, so a pane edge doesn't clip them.
 - A mirrored window renders in every placement, but a client has one size: the most recently laid-out placement sets
   it, and the others show a crop.
+- The shell draws what Domicile leaves to it (`src/domicile/Overlays.tsx`): the lock screen (Domicile locks before
+  sleep, and only the shell can take the passphrase), notifications, and portal dialogs (file pickers, screen-share
+  and screenshot pickers) through Domicile's `PortalDialogs`.
+- Wayland tools that work: `grim`/`slurp`, `wf-recorder`, `wl-clipboard`, clipboard managers. Domicile has no
+  layer-shell, so panels and notification daemons such as waybar or mako don't show; it has no Xwayland either.
 - `globalThis.cwm` exposes the store and key handler for driving the desktop over DevTools
   (`DOMICILE_ENGINE_ARGS=--remote-debugging-port=…`).
 
