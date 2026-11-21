@@ -64,6 +64,7 @@ function bindKeys(domicile: Domicile) {
   handlers.set('Meta+d', openLauncher)
   handlers.set('Meta+f', toggleFullscreen)
   handlers.set('Meta+l', () => domicile.session.lock())
+  handlers.set('Meta+Shift+e', () => logOut(domicile, false))
 
   for (const chord of handlers.keys()) kb.grab(chord)
   const off = kb.on('shortcut', ({ chord }) => {
@@ -141,6 +142,22 @@ function registerDesktopCommands(domicile: Domicile) {
       run: () => domicile.session.lock(),
     },
     {
+      id: 'log-out',
+      title: 'Log out',
+      group: 'Desktop',
+      keywords: ['quit', 'exit', 'leave', 'session', 'sign out', 'escape'],
+      shortcut: 'Super+Shift+E',
+      run: () => logOut(domicile),
+    },
+    {
+      id: 'stock-shell',
+      title: 'Switch to Domicile’s default shell (manganese)',
+      group: 'Desktop',
+      keywords: ['escape', 'fallback', 'broken', 'reset', 'manganese'],
+      // Windows stay open; `domicile load-shell <path to shell.js>` comes back.
+      run: () => domicile.processes.launch(['domicile', 'load-shell', '@domicile-desktop/manganese']),
+    },
+    {
       id: 'app-titlebars',
       title: document.body.classList.contains('app-headers-shown') ? 'Auto-hide window title bars' : 'Always show window title bars',
       group: 'Desktop',
@@ -168,4 +185,32 @@ function toggleAppHeaders(shown = !document.body.classList.contains('app-headers
   } catch {
     // per-viewer convenience only
   }
+}
+
+/**
+ * Ends the login session, back to the login screen. Super+Shift+E asks for a
+ * second press within 4 s; the palette item is already a deliberate choice.
+ * `loginctl` acts at once (Domicile's own `domicile log-out` asks in a dialog
+ * this shell doesn't draw). Apps get SIGTERM, as with any logout. Apps run in
+ * their own systemd scopes, so the session id falls back to logind's record
+ * of this user's graphical session.
+ */
+let armed: ReturnType<typeof setTimeout> | undefined
+function logOut(domicile: Domicile, confirmed = true) {
+  if (!confirmed && armed === undefined) {
+    useDesktop.setState({ notice: 'Press Super+Shift+E again to log out' })
+    armed = setTimeout(() => {
+      armed = undefined
+      useDesktop.setState({ notice: undefined })
+    }, 4000)
+    return
+  }
+  clearTimeout(armed)
+  armed = undefined
+  useDesktop.setState({ notice: 'Logging out…' })
+  domicile.processes.launch([
+    'sh',
+    '-c',
+    'loginctl terminate-session "${XDG_SESSION_ID:-$(loginctl show-user "$(id -u)" -p Display --value)}"',
+  ])
 }

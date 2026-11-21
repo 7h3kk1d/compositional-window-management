@@ -65,6 +65,17 @@ Super+Return opens a terminal, so "go into container" is Super+Shift+Return.
 | Super+Space (or Super+D) | Launch app: installed desktop entries, searched in the palette (⌘K › "Launch app…") |
 | Super+F | The focused window full screen, and back (apps asking for fullscreen get it too) |
 | Super+L | Lock |
+| Super+Shift+E, twice | Log out, back to the login screen (also ⌘K › "Log out") |
+
+### Getting out
+
+- **Super+Shift+E twice**, or ⌘K › "Log out": ends the session; pick GNOME (or another session) at the login screen.
+- **Ctrl+Alt+F3**: a text console. Domicile's engine handles this itself, below the shell, so it works even when the
+  shell is broken. Log in and run `loginctl terminate-session <id>` (`loginctl list-sessions` shows the id), or
+  `domicile load-shell @domicile-desktop/manganese` from a terminal on the desktop to swap in the stock shell.
+- **⌘K › "Switch to Domicile’s default shell"**: the same swap, keeping open windows.
+- A shell that fails to load is retried five times, then the desktop stops and you are back at the login screen.
+- Over SSH (or Tailscale) from another machine: `loginctl terminate-session <id>`.
 
 ### How it behaves
 

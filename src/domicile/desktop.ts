@@ -45,6 +45,8 @@ interface DesktopState {
   focused: string | undefined
   /** The window shown over the whole screen, as its client asked or Super+F did. */
   fullscreen: string | undefined
+  /** A one-line message over the desktop, such as a logout confirmation. */
+  notice: string | undefined
 }
 
 export const useDesktop = create<DesktopState>(() => ({
@@ -53,6 +55,7 @@ export const useDesktop = create<DesktopState>(() => ({
   listed: false,
   focused: undefined,
   fullscreen: undefined,
+  notice: undefined,
 }))
 
 const appDataOf = (n: Doc['nodes'][NodeId] | undefined): AppData | undefined =>

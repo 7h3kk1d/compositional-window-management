@@ -188,10 +188,16 @@ function FloatingDialog({ w, all }: { w: ClientWindow; all: readonly ClientWindo
   )
 }
 
+function Notice() {
+  const notice = useDesktop((s) => s.notice)
+  return notice ? <div className="desktop-notice">{notice}</div> : null
+}
+
 export function Overlays({ domicile }: { domicile: Domicile }) {
   return (
     <>
       <FloatingDialogs />
+      <Notice />
       <Notifications domicile={domicile} />
       <PortalDialogs
         domicile={domicile}
