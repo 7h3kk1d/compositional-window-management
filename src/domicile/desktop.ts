@@ -66,6 +66,20 @@ const windowData = (w: ClientWindow): AppData => ({ appId: w.appId, pid: w.pid ?
 
 const isToplevel = (w: ClientWindow) => w.parent === undefined
 /**
+ * A "popup" that surrounds its whole parent is not a menu but a decoration:
+ * JetBrains IDEs on X11 draw their window's drop shadow as a separate window,
+ * 20px bigger on every side. Drawn, it is invisible and covers the IDE, taking
+ * its clicks, so it is left out. A real menu or tooltip never covers its window.
+ */
+export const isDecoration = (w: ClientWindow, all: readonly ClientWindow[]) => {
+  if (w.grab) return false
+  const p = all.find((x) => x.appId === w.parent)
+  if (!p?.width || !p.height || !w.width || !w.height) return false
+  const x = w.x ?? 0
+  const y = w.y ?? 0
+  return x <= 0 && y <= 0 && x + w.width >= p.width && y + w.height >= p.height
+}
+/**
  * A dialog (a client that gave its window a parent or a fixed size: file
  * choosers, prompts, pinentry) floats over the desktop at the size it drew;
  * see `Overlays.tsx`. Every other window gets a pane.
@@ -290,7 +304,7 @@ export function connect(domicile: Domicile): () => void {
     prevPopups = new Set(popups.map((w) => w.appId))
     if (!listed) return
     for (const p of popups) {
-      if (seen.has(p.appId) || p.grab) continue
+      if (seen.has(p.appId) || p.grab || isDecoration(p, windows ?? [])) continue
       let top = p
       while (top.parent !== undefined) {
         const up = windows?.find((w) => w.appId === top.parent)

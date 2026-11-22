@@ -2,7 +2,7 @@ import type { ClientWindow } from '@domicile-desktop/sdk/desktop/windows'
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { ContentProps } from '../content/registry'
-import { useDesktop, type AppData } from './desktop'
+import { isDecoration, useDesktop, type AppData } from './desktop'
 
 declare module 'react' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -14,16 +14,18 @@ declare module 'react' {
   }
 }
 
+/** Popups of `parent` that are drawn (see {@link isDecoration}). */
+const popupsOf = (parent: string, all: readonly ClientWindow[]) =>
+  all.filter((w) => w.parent === parent && !isDecoration(w, all))
+
 /** A popup and its own popups, at the offsets the client asked for, in its parent's coordinates. */
 function PopupTree({ parent, all }: { parent: string; all: readonly ClientWindow[] }) {
-  return all
-    .filter((w) => w.parent === parent)
-    .map((w) => (
-      <div key={w.appId} className="app-popup" style={{ left: w.x ?? 0, top: w.y ?? 0 }}>
-        <app app-id={w.appId} style={{ width: w.width ?? 0, height: w.height ?? 0, display: 'block' }} />
-        <PopupTree parent={w.appId} all={all} />
-      </div>
-    ))
+  return popupsOf(parent, all).map((w) => (
+    <div key={w.appId} className="app-popup" style={{ left: w.x ?? 0, top: w.y ?? 0 }}>
+      <app app-id={w.appId} style={{ width: w.width ?? 0, height: w.height ?? 0, display: 'block' }} />
+      <PopupTree parent={w.appId} all={all} />
+    </div>
+  ))
 }
 
 /**
@@ -33,7 +35,7 @@ function PopupTree({ parent, all }: { parent: string; all: readonly ClientWindow
  */
 export function Popups({ appId, anchor, all }: { appId: string; anchor: RefObject<HTMLElement | null>; all: readonly ClientWindow[] }) {
   const layer = useRef<HTMLDivElement>(null)
-  const open = all.some((w) => w.parent === appId)
+  const open = popupsOf(appId, all).length > 0
   useLayoutEffect(() => {
     if (!open) return
     let frame = 0
