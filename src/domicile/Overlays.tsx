@@ -6,12 +6,15 @@
  */
 import { PortalDialogs } from '@domicile-desktop/component-library/PortalDialogs'
 import { DEFAULT_NOTIFICATION_ACTION, type Notification } from '@domicile-desktop/sdk/notification'
+import type { BrowserWindow } from '@domicile-desktop/sdk/desktop/browser'
 import type { ClientWindow } from '@domicile-desktop/sdk/desktop/windows'
 import type { Domicile } from '@domicile-desktop/sdk/shell'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Popups } from './AppPane'
 import { closeApp, isFloating, useDesktop } from './desktop'
 import { moveFloating, onFloatMove } from './moves'
+import { browserTitle, isFloatingBrowser, useBrowser } from './browser'
+import { BrowserView } from './BrowserPane'
 
 /** A desktop attribute, followed through its `change`-style event. */
 function useFollow<T>(subscribe: (fn: () => void) => () => void, read: () => T): T {
@@ -179,21 +182,15 @@ function FloatingDialogs() {
   return windows.filter(isFloating).map((w) => <FloatingDialog key={w.appId} w={w} all={windows} />)
 }
 
-/**
- * A dialog floats centered, moved by dragging its bar (or its own title bar,
- * through a move request). Windows that leave decorations to the window
- * manager (most X11 apps, Steam's error boxes) get the bar's title and close
- * button; one that draws its own frame gets only a thin grab strip.
- */
-function FloatingDialog({ w, all }: { w: ClientWindow; all: readonly ClientWindow[] }) {
-  const anchor = useRef<HTMLElement | null>(null)
+/** Where a floating window has been dragged to, from its bar or with Super+drag (`moves.ts`). */
+function useFloatOffset(key: string) {
   const [at, setAt] = useState({ x: 0, y: 0 })
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null)
   const dragging = useRef<{ x: number; y: number } | null>(null)
   useEffect(
     () =>
-      onFloatMove((appId, dx, dy) => {
-        if (appId !== w.appId) return
+      onFloatMove((id, dx, dy) => {
+        if (id !== key) return
         // NaN: the button came up; keep where it was dropped.
         const d = Number.isNaN(dx) ? null : { x: dx, y: dy }
         const ended = dragging.current
@@ -201,20 +198,29 @@ function FloatingDialog({ w, all }: { w: ClientWindow; all: readonly ClientWindo
         dragging.current = d
         setDrag(d)
       }),
-    [w.appId],
+    [key],
   )
-  const x = at.x + (drag?.x ?? 0)
-  const y = at.y + (drag?.y ?? 0)
+  const style = { translate: `${at.x + (drag?.x ?? 0)}px ${at.y + (drag?.y ?? 0)}px` }
+  const grab = (e: React.PointerEvent) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
+    e.preventDefault()
+    moveFloating(key, { x: e.clientX, y: e.clientY })
+  }
+  return { style, grab }
+}
+
+/**
+ * A dialog floats centered, moved by dragging its bar or with Super+drag.
+ * Windows that leave decorations to the window manager (most X11 apps)
+ * get the bar's title and close button; one that draws its own frame gets
+ * only a thin grab strip.
+ */
+function FloatingDialog({ w, all }: { w: ClientWindow; all: readonly ClientWindow[] }) {
+  const anchor = useRef<HTMLElement | null>(null)
+  const { style, grab } = useFloatOffset(w.appId)
   return (
-    <div className="app-dialog" style={{ translate: `${x}px ${y}px` }}>
-      <div
-        className={`app-dialog-bar ${w.clientFrame ? 'thin' : ''}`}
-        onPointerDown={(e) => {
-          if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
-          e.preventDefault()
-          moveFloating(w.appId, { x: e.clientX, y: e.clientY })
-        }}
-      >
+    <div className="app-dialog" style={style}>
+      <div className={`app-dialog-bar ${w.clientFrame ? 'thin' : ''}`} onPointerDown={grab}>
         {!w.clientFrame && (
           <>
             <span className="title">{w.title || w.desktopId || 'Dialog'}</span>
@@ -230,6 +236,32 @@ function FloatingDialog({ w, all }: { w: ClientWindow; all: readonly ClientWindo
   )
 }
 
+/** Browser windows that asked for a size (sign-in popups, a call's small window) float at it. */
+function FloatingBrowsers({ domicile }: { domicile: Domicile }) {
+  const windows = useBrowser((s) => s.windows)
+  if (!windows) return null
+  return windows.filter(isFloatingBrowser).map((w) => <FloatingBrowser key={w.id} w={w} domicile={domicile} />)
+}
+
+function FloatingBrowser({ w, domicile }: { w: BrowserWindow; domicile: Domicile }) {
+  const { style, grab } = useFloatOffset('browser:' + w.id)
+  // An axis the page left unset gets a usual popup size.
+  const size = { width: w.width || 520, height: w.height || 640 }
+  return (
+    <div className="app-dialog browser-popup" style={style}>
+      <div className="app-dialog-bar" onPointerDown={grab}>
+        <span className="title">{browserTitle(w)}</span>
+        <button className="ghost" title="Close" onClick={() => domicile.browser.close(w.id)}>
+          ×
+        </button>
+      </div>
+      <div style={size}>
+        <BrowserView windowId={w.id} isApp isPrivate={w.isPrivate} />
+      </div>
+    </div>
+  )
+}
+
 function Notice() {
   const notice = useDesktop((s) => s.notice)
   return notice ? <div className="desktop-notice">{notice}</div> : null
@@ -239,6 +271,7 @@ export function Overlays({ domicile }: { domicile: Domicile }) {
   return (
     <>
       <FloatingDialogs />
+      <FloatingBrowsers domicile={domicile} />
       <Notice />
       <Notifications domicile={domicile} />
       <PortalDialogs

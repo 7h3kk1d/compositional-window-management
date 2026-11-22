@@ -48,13 +48,22 @@ export function setupLauncher(domicile: Domicile) {
     title: 'Launch app',
     items: () => {
       void refresh(domicile)
-      return entries.map((e) => ({
-        id: 'app-' + e.id,
-        title: e.name,
-        keywords: [e.words, e.id],
-        hint: e.comment || undefined,
-        run: () => domicile.processes.launch(withX11(e.command)),
-      }))
+      return [
+        {
+          id: 'app-web',
+          title: 'Web browser',
+          keywords: ['internet', 'page', 'url', 'site'],
+          hint: 'a page in a pane',
+          run: () => domicile.browser.open('about:blank'),
+        },
+        ...entries.map((e) => ({
+          id: 'app-' + e.id,
+          title: e.name,
+          keywords: [e.words, e.id],
+          hint: e.comment || undefined,
+          run: () => domicile.processes.launch(withX11(e.command)),
+        })),
+      ]
     },
   }
   registerRootItems(() => [
@@ -65,6 +74,14 @@ export function setupLauncher(domicile: Domicile) {
       keywords: ['open', 'run', 'start', 'application', 'program'],
       shortcut: 'Super+Space',
       page: 'apps',
+    },
+    {
+      id: 'web',
+      title: 'Web browser',
+      group: 'Desktop',
+      keywords: ['internet', 'page', 'url', 'site', 'open', 'new window'],
+      // A new page opens in a pane beside the focused one, its address bar focused.
+      run: () => domicile.browser.open('about:blank'),
     },
     {
       id: 'terminal',

@@ -74,7 +74,7 @@ export const isTiled = (w: ClientWindow) => isToplevel(w) && !w.dialog
 export const isFloating = (w: ClientWindow) => isToplevel(w) && w.dialog
 
 /** Doc edits made to follow the compositor skip undo history: undoing one would only be re-synced. */
-const edit = (fn: (d: Doc) => void) => {
+export const edit = (fn: (d: Doc) => void) => {
   const { doc } = useStore.getState()
   const next = produce(doc, (d) => {
     fn(d)
@@ -99,7 +99,25 @@ function sync() {
 function syncPass() {
   const { windows, listed } = useDesktop.getState()
   if (!windows) return
-  const open = new Map(windows.filter(isTiled).map((w) => [identity(windowData(w)), w]))
+  const open = new Map(
+    windows.filter(isTiled).map((w) => [identity(windowData(w)), { title: w.title || w.desktopId || 'Window', data: windowData(w) }]),
+  )
+  reconcile(APP_KIND, open, identity, listed)
+}
+
+/**
+ * Keeps one reachable leaf of `kind` per entry of `open` (keyed as `keyOf`
+ * keys a leaf's data): retitles the ones shown, removes the ones whose entry
+ * has gone (only once `listed`, since a reloaded shell first sees an empty
+ * list), and adds a pane beside the focused one for each new entry, as ⌥N
+ * does. Native windows and browser windows (`browser.ts`) both sync this way.
+ */
+export function reconcile<D>(
+  kind: string,
+  open: ReadonlyMap<string, { title: string; data: D }>,
+  keyOf: (data: D) => string,
+  listed: boolean,
+) {
   const { doc } = useStore.getState()
   const live = reachable(doc)
 
@@ -107,15 +125,15 @@ function syncPass() {
   const stale: Leaf[] = []
   const retitle: [NodeId, string][] = []
   for (const id of live) {
-    const data = appDataOf(doc.nodes[id])
-    if (data === undefined) continue
-    const w = open.get(identity(data))
-    if (!w) {
-      if (listed) stale.push(doc.nodes[id] as Leaf)
+    const n = doc.nodes[id]
+    if (n?.type !== 'leaf' || n.content.kind !== kind) continue
+    const key = keyOf(n.content.data as D)
+    const entry = open.get(key)
+    if (!entry) {
+      if (listed) stale.push(n)
     } else {
-      shown.add(identity(data))
-      const title = w.title || w.desktopId || 'Window'
-      if (doc.nodes[id].title !== title) retitle.push([id, title])
+      shown.add(key)
+      if (n.title !== entry.title) retitle.push([id, entry.title])
     }
   }
 
@@ -129,12 +147,12 @@ function syncPass() {
       for (const [id, title] of retitle) d.nodes[id].title = title
     })
 
-  for (const [key, w] of open) {
+  for (const [key, entry] of open) {
     if (shown.has(key)) continue
     const t = addTarget(buildCtx())
     let sid = ''
     edit((d) => {
-      sid = addChild(d, t.container.id, makeLeaf(w.title || w.desktopId || 'Window', APP_KIND, windowData(w)), {
+      sid = addChild(d, t.container.id, makeLeaf(entry.title, kind, entry.data), {
         meta: t.meta,
         index: t.index,
         parentView: t.view,

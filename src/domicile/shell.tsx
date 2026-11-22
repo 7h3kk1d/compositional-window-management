@@ -21,6 +21,8 @@ import { superDrag } from './moves'
 import { setupX11, withX11 } from './x11'
 import { openLauncher, setupLauncher, TERMINAL } from './launcher'
 import { Overlays } from './Overlays'
+import { BROWSER_KIND, connectBrowser, type BrowserData } from './browser'
+import { BrowserPane } from './BrowserPane'
 import { registerRootItems } from '../commands/commands'
 import { TOUR_KEY } from '../tour/tour'
 import * as ops from '../model/ops'
@@ -97,6 +99,15 @@ export const Shell = (root: HTMLElement, domicile: Domicile) => {
     Render: AppPane,
     close: ({ appId }: AppData) => closeApp(appId),
   })
+  registerContentKind({
+    id: BROWSER_KIND,
+    label: 'Web page',
+    icon: '◍',
+    create: (): BrowserData => ({ windowId: '' }),
+    Render: BrowserPane,
+    // Its page may ask to stay ("Leave site?"); the pane goes once the window does.
+    close: ({ windowId }: BrowserData) => domicile.browser.close(windowId),
+  })
   // A desktop session isn't a first visit: no tour over the login (⌘K › "Take the tour" still runs it).
   try {
     localStorage.setItem(TOUR_KEY, 'desktop')
@@ -107,6 +118,7 @@ export const Shell = (root: HTMLElement, domicile: Domicile) => {
   detectNested(domicile).catch((e: unknown) => console.warn('[cwm] could not tell whether nested:', e))
   setupX11(domicile).catch((e: unknown) => console.warn('[cwm] X11 bridge not started:', e))
   connect(domicile)
+  connectBrowser(domicile)
   bindKeys(domicile)
   setupLauncher(domicile)
   registerDesktopCommands(domicile)
