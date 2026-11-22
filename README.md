@@ -7,6 +7,7 @@ tabs, split, canvas, floating, grid, dock, document, outline, JSON, scrolling, m
 or timeline.
 
 ```sh
+nix develop     # Node, if it isn't installed (flake.nix)
 npm install
 npm run dev     # http://localhost:5173
 npm test        # model tests (lens round-trips, mirroring, cycles)
