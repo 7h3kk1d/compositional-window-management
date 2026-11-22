@@ -18,6 +18,7 @@ import '../index.css'
 import { AppPane } from './AppPane'
 import { APP_KIND, closeApp, connect, focusedApp, isFloating, setFullscreen, useDesktop, type AppData } from './desktop'
 import { superDrag } from './moves'
+import { detectNested, isNested } from './nested'
 import { setupX11, withX11 } from './x11'
 import { openLauncher, setupLauncher, TERMINAL } from './launcher'
 import { Overlays } from './Overlays'
@@ -221,7 +222,7 @@ function toggleAppHeaders(shown = !document.body.classList.contains('app-headers
 let armed: ReturnType<typeof setTimeout> | undefined
 function logOut(domicile: Domicile, confirmed = true) {
   // Nested in GNOME, "the session" is GNOME's: logging out from here would end it.
-  if (nested !== false) {
+  if (isNested() !== false) {
     useDesktop.setState({ notice: 'Running in a window inside another desktop: close the window to quit' })
     setTimeout(() => useDesktop.setState({ notice: undefined }), 4000)
     return
@@ -246,15 +247,4 @@ function logOut(domicile: Domicile, confirmed = true) {
     'systemctl --user start --job-mode=replace-irreversibly domicile-session-shutdown.target; ' +
       'loginctl terminate-session "${XDG_SESSION_ID:-$(loginctl show-user "$(id -u)" -p Display --value)}"',
   ])
-}
-
-/**
- * Whether this desktop runs in a window inside another desktop (GNOME),
- * rather than as the login session; `undefined` until known. A login session
- * starts `domicile-session.target`; a nested desktop registers nothing.
- */
-let nested: boolean | undefined
-async function detectNested(domicile: Domicile) {
-  const ran = await domicile.processes.run(['systemctl', '--user', 'is-active', '--quiet', 'domicile-session.target'])
-  nested = ran.match({ Ok: (r) => r.code !== 0, Err: () => true })
 }

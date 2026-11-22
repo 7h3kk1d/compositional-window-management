@@ -10,6 +10,7 @@ import { installedApps } from '@domicile-desktop/system-apps/installed'
 import { PAGES, registerRootItems } from '../commands/commands'
 import { useStore } from '../model/store'
 import { withX11 } from './x11'
+import { isNested } from './nested'
 
 export const TERMINAL = ['alacritty']
 
@@ -24,13 +25,15 @@ let loading: Promise<void> | undefined
 function refresh(domicile: Domicile) {
   loading ??= (async () => {
     try {
-      const apps = await (await dataDirs(domicile)).andThenAsync((dirs) => installedApps(domicile, dirs))
+      const dirs = await dataDirs(domicile)
+      const apps = await dirs.andThenAsync((d) => installedApps(domicile, d))
       apps.match({
         Ok: (found) => {
           entries = found.toSorted((a, b) => a.name.localeCompare(b.name))
         },
         Err: (error) => console.warn('[cwm] could not read installed applications:', error.message),
       })
+      dbusActivated = await findDbusActivated(domicile, dirs.unwrapOr([]))
     } catch (e) {
       console.warn('[cwm] could not read installed applications', e)
     } finally {
@@ -38,6 +41,40 @@ function refresh(domicile: Domicile) {
     }
   })()
   return loading
+}
+
+/**
+ * Desktop entries marked `DBusActivatable=true` (Nautilus, most GNOME apps).
+ * Launching one asks the session bus for it, and the bus starts it with the
+ * user manager's environment: while nested in GNOME that is GNOME's display,
+ * so the window opened there, even with no copy running.
+ */
+let dbusActivated = new Set<string>()
+async function findDbusActivated(domicile: Domicile, dirs: readonly string[]): Promise<Set<string>> {
+  const found = await domicile.processes.run([
+    'sh',
+    '-c',
+    'for d in "$@"; do case "$d" in /*) ;; *) d="$HOME/$d";; esac; ' +
+      'grep -l -s "^DBusActivatable=true" "$d"/applications/*.desktop; done; true',
+    'sh',
+    ...dirs,
+  ])
+  return found.match({
+    Ok: (ran) => new Set(ran.stdout.split('\n').filter(Boolean).map((path) => path.slice(path.lastIndexOf('/') + 1))),
+    Err: () => new Set<string>(),
+  })
+}
+
+/**
+ * How a launcher entry starts. Nested in another desktop, a D-Bus activated
+ * app gets a private session bus of its own (`dbus-run-session`), so it starts
+ * its own copy on this desktop instead of being started, or found, on the
+ * host's. That copy shares no bus with the host's apps, so host-only services
+ * such as its notifications don't reach it.
+ */
+function commandFor(e: DesktopEntry): string[] {
+  const argv = withX11(e.command)
+  return isNested() !== false && dbusActivated.has(e.id) ? ['dbus-run-session', '--', ...argv] : argv
 }
 
 export const appEntries = () => entries
@@ -61,7 +98,7 @@ export function setupLauncher(domicile: Domicile) {
           title: e.name,
           keywords: [e.words, e.id],
           hint: e.comment || undefined,
-          run: () => domicile.processes.launch(withX11(e.command)),
+          run: () => domicile.processes.launch(commandFor(e)),
         })),
       ]
     },
