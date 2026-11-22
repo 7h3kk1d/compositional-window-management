@@ -4,7 +4,7 @@
  * Domicile has no Xwayland, but xwayland-satellite bridges X11 windows to
  * ordinary Wayland toplevels, which then tile like any window. On a real
  * Domicile login there is no X display, so the shell starts the bridge once
- * on `X_DISPLAY` (a reloaded shell finds its socket and leaves it be) and
+ * on `X_DISPLAY` (a reloaded shell finds it running and leaves it be) and
  * puts `DISPLAY` on everything it launches; a terminal passes it on, so
  * `steam` typed there works too. Nested in another desktop, `DISPLAY` is
  * already set to that desktop's X server and nothing changes.
@@ -25,8 +25,12 @@ export async function setupX11(domicile: Domicile) {
     Err: () => undefined,
   })
   if (own !== undefined) return
-  const socket = `/tmp/.X11-unix/X${X_DISPLAY.slice(1)}`
-  const running = (await domicile.processes.run(['test', '-S', socket])).match({
+  // Is the bridge already up (a reloaded shell)? Its Xwayland keeps no lock file
+  // and a crash leaves the socket behind, so look for the process. The `[x]`
+  // keeps pgrep from matching this check's own command line.
+  const running = (
+    await domicile.processes.run(['sh', '-c', `pgrep -u "$(id -u)" -f '^[x]wayland-satellite ${X_DISPLAY}$' >/dev/null`])
+  ).match({
     Ok: (ran) => ran.code === 0,
     Err: () => false,
   })
