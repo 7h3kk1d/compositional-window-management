@@ -65,6 +65,7 @@ Super+Return opens a terminal, so "go into container" is Super+Shift+Return.
 | Super+Space (or Super+D) | Launch app: installed desktop entries, searched in the palette (⌘K › "Launch app…") |
 | Super+F | The focused window full screen, and back (apps asking for fullscreen get it too) |
 | Super+L | Lock |
+| Super+drag | Move the window under the pointer (any app, from anywhere on it), as the frame grip does |
 | Super+Shift+E, twice | Log out, back to the login screen (also ⌘K › "Log out") |
 
 ### Getting out
@@ -84,10 +85,14 @@ Super+Return opens a terminal, so "go into container" is Super+Shift+Return.
 ### How it behaves
 
 - Closing an app removes its pane, and Super+W on a window's last pane closes the app.
-- A window's pane hides CWM's title bar to a thin strip along its top, since most apps draw their own; hover the strip
-  to drag, retitle or close the pane. ⌘K › "Always show window title bars" keeps it open.
+- An app that draws its own title bar (Firefox, GTK apps) gets CWM's header as a thin strip along its top; hover the
+  strip to drag, retitle or close the pane, or Super+drag the window itself. Apps that leave decorations to the window
+  manager keep the full header. ⌘K › "Always show window title bars" keeps it open everywhere.
+- A pane smaller than its app's minimum size (Firefox won't go under 500px wide) shows the window at its minimum,
+  scaled down to fit, instead of letting it spill past the pane.
 - Dialogs (file choosers, prompts: windows with a parent or a fixed size) float centered at their own size instead of
-  taking a pane.
+  taking a pane. Drag their bar to move them; × or Super+W closes the focused one.
+- A pane that fails to render shows its error in place; the rest of the desktop keeps running.
 - Menus and tooltips are drawn in a page-level layer over their window, so a pane edge doesn't clip them.
 - A mirrored window renders in every placement, but a client has one size: the most recently laid-out placement sets
   it, and the others show a crop.
@@ -95,7 +100,9 @@ Super+Return opens a terminal, so "go into container" is Super+Shift+Return.
   sleep, and only the shell can take the passphrase), notifications, and portal dialogs (file pickers, screen-share
   and screenshot pickers) through Domicile's `PortalDialogs`.
 - Wayland tools that work: `grim`/`slurp`, `wf-recorder`, `wl-clipboard`, clipboard managers. Domicile has no
-  layer-shell, so panels and notification daemons such as waybar or mako don't show; it has no Xwayland either.
+  layer-shell, so panels and notification daemons such as waybar or mako don't show.
+- X11 apps (Steam and its games) run through `xwayland-satellite`, which the shell starts on `DISPLAY=:11` when the
+  session has no X display, adding that `DISPLAY` to everything it launches (`src/domicile/x11.ts`).
 - `globalThis.cwm` exposes the store and key handler for driving the desktop over DevTools
   (`DOMICILE_ENGINE_ARGS=--remote-debugging-port=…`).
 

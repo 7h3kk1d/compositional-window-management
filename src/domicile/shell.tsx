@@ -16,7 +16,9 @@ import { registerContentKind } from '../content/registry'
 // Domicile serves only the module: the build inlines every stylesheet into it (vite.shell.config.ts).
 import '../index.css'
 import { AppPane } from './AppPane'
-import { APP_KIND, closeApp, connect, focusedApp, setFullscreen, useDesktop, type AppData } from './desktop'
+import { APP_KIND, closeApp, connect, focusedApp, isFloating, setFullscreen, useDesktop, type AppData } from './desktop'
+import { superDrag } from './moves'
+import { setupX11, withX11 } from './x11'
 import { openLauncher, setupLauncher, TERMINAL } from './launcher'
 import { Overlays } from './Overlays'
 import { registerRootItems } from '../commands/commands'
@@ -58,13 +60,19 @@ function bindKeys(domicile: Domicile) {
   for (const k of CMD) handlers.set(`Meta+${k}`, () => replay('Key' + k.toUpperCase(), k, { ctrlKey: true }))
   handlers.set('Meta+Shift+z', () => replay('KeyZ', 'z', { ctrlKey: true, shiftKey: true }))
   // Super+Return is the terminal, as in most tiling WMs; "go into container" moves to Super+Shift+Return.
-  handlers.set('Meta+Return', () => domicile.processes.launch(TERMINAL))
+  handlers.set('Meta+Return', () => domicile.processes.launch(withX11(TERMINAL)))
   handlers.set('Meta+Shift+Return', () => replay('Enter', 'Enter', { altKey: true }))
   handlers.set('Meta+space', openLauncher)
   handlers.set('Meta+d', openLauncher)
   handlers.set('Meta+f', toggleFullscreen)
   handlers.set('Meta+l', () => domicile.session.lock())
   handlers.set('Meta+Shift+e', () => logOut(domicile, false))
+  // A focused dialog floats outside the layout: Super+W closes it, not the pane behind it.
+  handlers.set('Meta+w', () => {
+    const focused = domicile.windows.list.find((w) => w.appId === domicile.windows.focused)
+    if (focused && isFloating(focused)) return domicile.windows.close(focused.appId)
+    replay('KeyW', 'w', { altKey: true })
+  })
 
   for (const chord of handlers.keys()) kb.grab(chord)
   const off = kb.on('shortcut', ({ chord }) => {
@@ -95,6 +103,8 @@ export const Shell = (root: HTMLElement, domicile: Domicile) => {
   } catch {
     // storage refused: maybeStartTour then treats the tour as seen anyway
   }
+  superDrag()
+  setupX11(domicile).catch((e: unknown) => console.warn('[cwm] X11 bridge not started:', e))
   connect(domicile)
   bindKeys(domicile)
   setupLauncher(domicile)

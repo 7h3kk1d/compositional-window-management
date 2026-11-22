@@ -1,5 +1,5 @@
 import type { ClientWindow } from '@domicile-desktop/sdk/desktop/windows'
-import { useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { ContentProps } from '../content/registry'
 import { useDesktop, type AppData } from './desktop'
@@ -80,6 +80,39 @@ function trackMirror(appId: string) {
   }
 }
 
+
+/**
+ * A client won't draw smaller than its minimum size (Firefox: 500px wide), and
+ * Domicile shows whatever it draws, so in a smaller pane (a canvas card, a
+ * kanban card, a scroll column) the window spilled past its pane. Instead the
+ * window is laid out at its minimum and scaled down to fit, like a live
+ * thumbnail; Domicile maps the pointer through the transform.
+ */
+function useFitToMin(
+  pane: RefObject<HTMLElement | null>,
+  minWidth = 0,
+  minHeight = 0,
+  /** Changes whenever the pane element may have been replaced. */
+  mounted: unknown = undefined,
+): CSSProperties | undefined {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null)
+  useLayoutEffect(() => {
+    const el = pane.current
+    if (!el) return
+    // Measured now so the first frame already fits; the observer follows later resizes.
+    // oxlint-disable-next-line react/set-state-in-effect -- measuring layout is what a layout effect is for
+    setSize({ w: el.clientWidth, h: el.clientHeight })
+    const ro = new ResizeObserver(([entry]) => setSize({ w: entry.contentRect.width, h: entry.contentRect.height }))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [pane, mounted])
+  if (!size || !size.w || !size.h || (size.w >= minWidth && size.h >= minHeight)) return undefined
+  const width = Math.max(size.w, minWidth)
+  const height = Math.max(size.h, minHeight)
+  const scale = Math.min(size.w / width, size.h / height)
+  return { width, height, transform: `scale(${scale})`, transformOrigin: '0 0' }
+}
+
 export function AppPane({ data }: ContentProps<AppData>) {
   const windows = useDesktop((s) => s.windows)
   const fullscreen = useDesktop((s) => s.fullscreen === data.appId)
@@ -91,6 +124,19 @@ export function AppPane({ data }: ContentProps<AppData>) {
       return track(el)
     }
   }, [data.appId])
+  const open = useDesktop((s) => s.windows?.some((w) => w.appId === data.appId) === true)
+  const clientFrame = useDesktop((s) => s.windows?.find((w) => w.appId === data.appId)?.clientFrame === true)
+  const minWidth = useDesktop((s) => s.windows?.find((w) => w.appId === data.appId)?.minWidth)
+  const minHeight = useDesktop((s) => s.windows?.find((w) => w.appId === data.appId)?.minHeight)
+  // The frame (NodeView) is generic; tag it so CSS collapses CWM's header only
+  // for windows that draw their own title bar (client-side decorations).
+  const body = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const frame = body.current?.closest('.frame')
+    frame?.classList.toggle('app-csd', clientFrame)
+    return () => frame?.classList.remove('app-csd')
+  }, [clientFrame, fullscreen, open])
+  const fit = useFitToMin(body, minWidth, minHeight, `${open}:${fullscreen}`)
   if (!windows) return <div className="app-missing">Native windows need Domicile (see README).</div>
   if (!windows.some((w) => w.appId === data.appId)) return <div className="app-missing">Window closed</div>
   // Out of the layout (and any canvas zoom) onto the page itself; the pane
@@ -98,7 +144,9 @@ export function AppPane({ data }: ContentProps<AppData>) {
   if (fullscreen)
     return (
       <>
-        <div className="app-missing">Full screen (Super+F)</div>
+        <div className="app-missing" ref={body}>
+          Full screen (Super+F)
+        </div>
         {createPortal(
           <div className="app-kind app-fullscreen">
             <app app-id={data.appId} ref={ref} />
@@ -109,8 +157,8 @@ export function AppPane({ data }: ContentProps<AppData>) {
       </>
     )
   return (
-    <div className="app-kind">
-      <app app-id={data.appId} ref={ref} />
+    <div className="app-kind" ref={body}>
+      <app app-id={data.appId} ref={ref} style={fit} />
       <Popups appId={data.appId} anchor={anchor} all={windows} />
     </div>
   )

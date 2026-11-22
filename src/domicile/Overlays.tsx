@@ -10,7 +10,8 @@ import type { ClientWindow } from '@domicile-desktop/sdk/desktop/windows'
 import type { Domicile } from '@domicile-desktop/sdk/shell'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Popups } from './AppPane'
-import { isFloating, useDesktop } from './desktop'
+import { closeApp, isFloating, useDesktop } from './desktop'
+import { moveFloating, onFloatMove } from './moves'
 
 /** A desktop attribute, followed through its `change`-style event. */
 function useFollow<T>(subscribe: (fn: () => void) => () => void, read: () => T): T {
@@ -178,10 +179,51 @@ function FloatingDialogs() {
   return windows.filter(isFloating).map((w) => <FloatingDialog key={w.appId} w={w} all={windows} />)
 }
 
+/**
+ * A dialog floats centered, moved by dragging its bar (or its own title bar,
+ * through a move request). Windows that leave decorations to the window
+ * manager (most X11 apps, Steam's error boxes) get the bar's title and close
+ * button; one that draws its own frame gets only a thin grab strip.
+ */
 function FloatingDialog({ w, all }: { w: ClientWindow; all: readonly ClientWindow[] }) {
   const anchor = useRef<HTMLElement | null>(null)
+  const [at, setAt] = useState({ x: 0, y: 0 })
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null)
+  const dragging = useRef<{ x: number; y: number } | null>(null)
+  useEffect(
+    () =>
+      onFloatMove((appId, dx, dy) => {
+        if (appId !== w.appId) return
+        // NaN: the button came up; keep where it was dropped.
+        const d = Number.isNaN(dx) ? null : { x: dx, y: dy }
+        const ended = dragging.current
+        if (!d && ended) setAt((a) => ({ x: a.x + ended.x, y: a.y + ended.y }))
+        dragging.current = d
+        setDrag(d)
+      }),
+    [w.appId],
+  )
+  const x = at.x + (drag?.x ?? 0)
+  const y = at.y + (drag?.y ?? 0)
   return (
-    <div className="app-dialog">
+    <div className="app-dialog" style={{ translate: `${x}px ${y}px` }}>
+      <div
+        className={`app-dialog-bar ${w.clientFrame ? 'thin' : ''}`}
+        onPointerDown={(e) => {
+          if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
+          e.preventDefault()
+          moveFloating(w.appId, { x: e.clientX, y: e.clientY })
+        }}
+      >
+        {!w.clientFrame && (
+          <>
+            <span className="title">{w.title || w.desktopId || 'Dialog'}</span>
+            <button className="ghost" title="Close (Super+W)" onClick={() => closeApp(w.appId)}>
+              ×
+            </button>
+          </>
+        )}
+      </div>
       <app app-id={w.appId} ref={anchor} style={{ width: w.width ?? 0, height: w.height ?? 0, display: 'block' }} />
       <Popups appId={w.appId} anchor={anchor} all={all} />
     </div>

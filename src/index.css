@@ -1654,16 +1654,18 @@ button.toggle.on {
 }
 
 /*
- * Native window panes: most apps draw their own title bar (client-side
- * decorations, or a browser's tab strip), so CWM's header shrinks to a strip
- * along the top edge and slides open over the window on hover. Focus shows
- * as the strip's color. ⌘K › "Always show window title bars" turns it off.
+ * Native window panes whose app draws its own title bar (client-side
+ * decorations, or a browser's tab strip; `app-csd`, set by AppPane): CWM's
+ * header shrinks to a strip along the top edge and slides open over the window
+ * on hover; Super+drag anywhere on the window moves it (moves.ts). Apps
+ * that leave decorations to the window manager keep the full header. Focus
+ * shows as the strip's color. ⌘K › "Always show window title bars" turns it off.
  */
-body:not(.app-headers-shown) .frame.kind-app:not(.bare) > .frame-header {
+body:not(.app-headers-shown) .frame.kind-app.app-csd:not(.bare) > .frame-header {
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 5;
-  height: 4px;
+  height: 6px;
   padding-top: 0;
   padding-bottom: 0;
   border-bottom: none;
@@ -1673,26 +1675,26 @@ body:not(.app-headers-shown) .frame.kind-app:not(.bare) > .frame-header {
     height 120ms ease 150ms,
     background 120ms;
 }
-body:not(.app-headers-shown) .frame.kind-app.focused:not(.bare) > .frame-header {
+body:not(.app-headers-shown) .frame.kind-app.app-csd.focused:not(.bare) > .frame-header {
   background: var(--accent);
 }
-body:not(.app-headers-shown) .frame.kind-app:not(.bare) > .frame-header > * {
+body:not(.app-headers-shown) .frame.kind-app.app-csd:not(.bare) > .frame-header > * {
   visibility: hidden;
 }
-body:not(.app-headers-shown) .frame.kind-app:not(.bare) > .frame-header:hover,
-body:not(.app-headers-shown) .frame.kind-app:not(.bare) > .frame-header:focus-within,
-body.pointer-dragging .frame.kind-app:not(.bare) > .frame-header {
+body:not(.app-headers-shown) .frame.kind-app.app-csd:not(.bare) > .frame-header:hover,
+body:not(.app-headers-shown) .frame.kind-app.app-csd:not(.bare) > .frame-header:focus-within,
+body.pointer-dragging .frame.kind-app.app-csd:not(.bare) > .frame-header {
   height: var(--header-h);
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow);
   transition-delay: 0ms;
 }
-body:not(.app-headers-shown) .frame.kind-app:not(.bare) > .frame-header:hover > *,
-body:not(.app-headers-shown) .frame.kind-app:not(.bare) > .frame-header:focus-within > * {
+body:not(.app-headers-shown) .frame.kind-app.app-csd:not(.bare) > .frame-header:hover > *,
+body:not(.app-headers-shown) .frame.kind-app.app-csd:not(.bare) > .frame-header:focus-within > * {
   visibility: visible;
 }
-body:not(.app-headers-shown) .frame.kind-app:not(.bare) {
+body:not(.app-headers-shown) .frame.kind-app.app-csd:not(.bare) {
   border-radius: 4px;
 }
 
@@ -1824,4 +1826,29 @@ body:not(.app-headers-shown) .frame.kind-app:not(.bare) {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   font-weight: 500;
+}
+
+/* A floating dialog's bar: title and close for windows without their own frame, a grab strip otherwise. */
+.app-dialog-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--header-h);
+  padding: 0 4px 0 10px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+}
+.app-dialog-bar .title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.app-dialog-bar.thin {
+  height: 6px;
+  padding: 0;
+  border-bottom: none;
 }

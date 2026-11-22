@@ -9,6 +9,7 @@ import type { DesktopEntry } from '@domicile-desktop/system-apps/desktop-entry'
 import { installedApps } from '@domicile-desktop/system-apps/installed'
 import { PAGES, registerRootItems } from '../commands/commands'
 import { useStore } from '../model/store'
+import { withX11 } from './x11'
 
 export const TERMINAL = ['alacritty']
 
@@ -52,7 +53,7 @@ export function setupLauncher(domicile: Domicile) {
         title: e.name,
         keywords: [e.words, e.id],
         hint: e.comment || undefined,
-        run: () => domicile.processes.launch(e.command),
+        run: () => domicile.processes.launch(withX11(e.command)),
       }))
     },
   }
@@ -71,7 +72,7 @@ export function setupLauncher(domicile: Domicile) {
       group: 'Desktop',
       keywords: ['shell', 'console', TERMINAL[0]],
       shortcut: 'Super+↵',
-      run: () => domicile.processes.launch(TERMINAL),
+      run: () => domicile.processes.launch(withX11(TERMINAL)),
     },
   ])
 }
