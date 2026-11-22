@@ -66,10 +66,13 @@ const windowData = (w: ClientWindow): AppData => ({ appId: w.appId, pid: w.pid ?
 
 const isToplevel = (w: ClientWindow) => w.parent === undefined
 /**
- * A "popup" that surrounds its whole parent is not a menu but a decoration:
- * JetBrains IDEs on X11 draw their window's drop shadow as a separate window,
- * 20px bigger on every side. Drawn, it is invisible and covers the IDE, taking
- * its clicks, so it is left out. A real menu or tooltip never covers its window.
+ * A "popup" sticking out past its parent on every side is not a menu but a
+ * decoration: JetBrains IDEs draw their window's drop shadow as a separate
+ * surface, 20px bigger all round. Drawn, it is invisible and covers the IDE,
+ * taking its clicks, so it is left out.
+ *
+ * Strictly bigger: Gecko apps (Zotero, Thunderbird) draw their whole content
+ * in a child exactly the size of the window, at its origin, and that must show.
  */
 export const isDecoration = (w: ClientWindow, all: readonly ClientWindow[]) => {
   if (w.grab) return false
@@ -77,8 +80,13 @@ export const isDecoration = (w: ClientWindow, all: readonly ClientWindow[]) => {
   if (!p?.width || !p.height || !w.width || !w.height) return false
   const x = w.x ?? 0
   const y = w.y ?? 0
-  return x <= 0 && y <= 0 && x + w.width >= p.width && y + w.height >= p.height
+  return x < 0 && y < 0 && x + w.width > p.width && y + w.height > p.height
 }
+/**
+ * A window 1px or less on a side is a helper the app keeps out of sight
+ * (Zotero's LibreOffice integration is 377×1): it gets no pane and no float.
+ */
+const isHelper = (w: ClientWindow) => (w.width !== undefined && w.width <= 1) || (w.height !== undefined && w.height <= 1)
 /**
  * A dialog (a client that gave its window a parent or a fixed size: file
  * choosers, prompts, pinentry) floats over the desktop at the size it drew;
@@ -94,8 +102,8 @@ const isDialog = (w: ClientWindow) => {
   if (w.transientFor !== undefined) return true
   return (w.width ?? 0) <= globalThis.innerWidth * 0.75 && (w.height ?? 0) <= globalThis.innerHeight * 0.75
 }
-export const isTiled = (w: ClientWindow) => isToplevel(w) && !isDialog(w)
-export const isFloating = (w: ClientWindow) => isToplevel(w) && isDialog(w)
+export const isTiled = (w: ClientWindow) => isToplevel(w) && !isHelper(w) && !isDialog(w)
+export const isFloating = (w: ClientWindow) => isToplevel(w) && !isHelper(w) && isDialog(w)
 
 /** Doc edits made to follow the compositor skip undo history: undoing one would only be re-synced. */
 export const edit = (fn: (d: Doc) => void) => {
