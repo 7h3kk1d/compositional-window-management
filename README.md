@@ -76,6 +76,10 @@ Super+Return opens a terminal, so "go into container" is Super+Shift+Return.
 - **⌘K › "Switch to Domicile’s default shell"**: the same swap, keeping open windows.
 - A shell that fails to load is retried five times, then the desktop stops and you are back at the login screen.
 - Over SSH (or Tailscale) from another machine: `loginctl terminate-session <id>`.
+- If GNOME then bounces back to the login screen ("A graphical session is already running!" in the journal), the
+  Domicile session ended without its cleanup (a crash, or `loginctl terminate-session`) and, with linger, left
+  `graphical-session.target` up. From a console or SSH: `systemctl --user start --job-mode=replace-irreversibly
+  domicile-session-shutdown.target`. Super+Shift+E runs this itself before logging out.
 
 ### How it behaves
 

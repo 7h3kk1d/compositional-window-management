@@ -211,6 +211,10 @@ function logOut(domicile: Domicile, confirmed = true) {
   domicile.processes.launch([
     'sh',
     '-c',
-    'loginctl terminate-session "${XDG_SESSION_ID:-$(loginctl show-user "$(id -u)" -p Display --value)}"',
+    // End the graphical session as Domicile does when it exits on its own: with
+    // linger the user manager outlives the login, and a graphical-session.target
+    // left active makes the next GNOME login refuse to start.
+    'systemctl --user start --job-mode=replace-irreversibly domicile-session-shutdown.target; ' +
+      'loginctl terminate-session "${XDG_SESSION_ID:-$(loginctl show-user "$(id -u)" -p Display --value)}"',
   ])
 }
