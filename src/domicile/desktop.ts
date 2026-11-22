@@ -66,12 +66,22 @@ const windowData = (w: ClientWindow): AppData => ({ appId: w.appId, pid: w.pid ?
 
 const isToplevel = (w: ClientWindow) => w.parent === undefined
 /**
- * Windows that get a pane. A dialog (a client that gave its window a parent
- * or a fixed size: file choosers, prompts, pinentry) floats over the desktop
- * at the size it drew instead; see `Overlays.tsx`.
+ * A dialog (a client that gave its window a parent or a fixed size: file
+ * choosers, prompts, pinentry) floats over the desktop at the size it drew;
+ * see `Overlays.tsx`. Every other window gets a pane.
+ *
+ * "Fixed size" alone is a weak signal: X11 apps through xwayland-satellite
+ * (IntelliJ's main window) can report one, and a whole IDE floated at its own
+ * size covers the desktop. So a parentless "dialog" floats only while it is
+ * clearly smaller than the screen.
  */
-export const isTiled = (w: ClientWindow) => isToplevel(w) && !w.dialog
-export const isFloating = (w: ClientWindow) => isToplevel(w) && w.dialog
+const isDialog = (w: ClientWindow) => {
+  if (!w.dialog) return false
+  if (w.transientFor !== undefined) return true
+  return (w.width ?? 0) <= globalThis.innerWidth * 0.75 && (w.height ?? 0) <= globalThis.innerHeight * 0.75
+}
+export const isTiled = (w: ClientWindow) => isToplevel(w) && !isDialog(w)
+export const isFloating = (w: ClientWindow) => isToplevel(w) && isDialog(w)
 
 /** Doc edits made to follow the compositor skip undo history: undoing one would only be re-synced. */
 export const edit = (fn: (d: Doc) => void) => {
