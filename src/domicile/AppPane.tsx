@@ -2,7 +2,7 @@ import type { ClientWindow } from '@domicile-desktop/sdk/desktop/windows'
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { ContentProps } from '../content/registry'
-import { isDecoration, useDesktop, type AppData } from './desktop'
+import { isContentChild, isDecoration, useDesktop, type AppData } from './desktop'
 
 declare module 'react' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -22,7 +22,16 @@ const popupsOf = (parent: string, all: readonly ClientWindow[]) =>
 function PopupTree({ parent, all }: { parent: string; all: readonly ClientWindow[] }) {
   return popupsOf(parent, all).map((w) => (
     <div key={w.appId} className="app-popup" style={{ left: w.x ?? 0, top: w.y ?? 0 }}>
-      <app app-id={w.appId} style={{ width: w.width ?? 0, height: w.height ?? 0, display: 'block' }} />
+      <app
+        app-id={w.appId}
+        style={{
+          width: w.width ?? 0,
+          height: w.height ?? 0,
+          display: 'block',
+          // A Gecko content child: drawn, but clicks reach the window beneath (desktop.ts).
+          pointerEvents: isContentChild(w, all) ? 'none' : undefined,
+        }}
+      />
       <PopupTree parent={w.appId} all={all} />
     </div>
   ))

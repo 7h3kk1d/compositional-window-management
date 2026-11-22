@@ -83,6 +83,16 @@ export const isDecoration = (w: ClientWindow, all: readonly ClientWindow[]) => {
   return x < 0 && y < 0 && x + w.width > p.width && y + w.height > p.height
 }
 /**
+ * A child exactly the size of its window, at its origin, and not a menu: a
+ * Gecko app's (Zotero, Thunderbird) whole content. It is drawn, but the app
+ * takes input on the window itself, so clicks pass through it to the window.
+ */
+export const isContentChild = (w: ClientWindow, all: readonly ClientWindow[]) => {
+  if (w.grab || w.parent === undefined) return false
+  const p = all.find((x) => x.appId === w.parent)
+  return !!p && (w.x ?? 0) === 0 && (w.y ?? 0) === 0 && w.width === p.width && w.height === p.height
+}
+/**
  * A window 1px or less on a side is a helper the app keeps out of sight
  * (Zotero's LibreOffice integration is 377×1): it gets no pane and no float.
  */
