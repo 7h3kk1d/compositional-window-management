@@ -282,7 +282,26 @@ export function connect(domicile: Domicile): () => void {
     // A new dialog takes the keyboard, as it would on any desktop.
     const opened = floating.filter((id) => !before.has(id))
     if (listed && opened.length) domicile.windows.focus(opened[opened.length - 1])
+    // A popup that opens by itself (not a menu the user pulled down) for a
+    // window in a hidden tab, such as IntelliJ asking to trust a project:
+    // bring that window's pane forward so the question can be seen.
+    const seen = prevPopups ?? new Set<string>()
+    const popups = windows?.filter((w) => w.parent !== undefined) ?? []
+    prevPopups = new Set(popups.map((w) => w.appId))
+    if (!listed) return
+    for (const p of popups) {
+      if (seen.has(p.appId) || p.grab) continue
+      let top = p
+      while (top.parent !== undefined) {
+        const up = windows?.find((w) => w.appId === top.parent)
+        if (!up) break
+        top = up
+      }
+      const el = document.querySelector<HTMLElement>(`app[app-id="${CSS.escape(top.appId)}"]`)
+      if (!el || !el.offsetWidth || !el.offsetHeight) grantFocus(domicile, top.appId)
+    }
   }
+  let prevPopups: Set<string> | undefined
   read(false)
   sync()
   const signal = { stopped: false }

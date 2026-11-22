@@ -42,6 +42,9 @@ export function Popups({ appId, anchor, all }: { appId: string; anchor: RefObjec
       const box = layer.current
       if (el && box) {
         const r = el.getBoundingClientRect()
+        // A window in a hidden tab has no box: its popups hide with it rather
+        // than float at the corner of whatever is shown.
+        box.style.visibility = r.width && r.height ? '' : 'hidden'
         box.style.transform = `translate(${r.x}px, ${r.y}px) scale(${el.offsetWidth ? r.width / el.offsetWidth : 1})`
       }
       frame = requestAnimationFrame(follow)
