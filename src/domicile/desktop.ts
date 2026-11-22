@@ -292,6 +292,7 @@ function grantFocus(domicile: Domicile, appId: string) {
 
 export function connect(domicile: Domicile): () => void {
   const tiled = new Set<string>()
+  const hidden = new Set<string>()
   const tile = () => {
     for (const w of domicile.windows.list ?? [])
       if (isTiled(w) && !tiled.has(w.appId)) {
@@ -301,6 +302,14 @@ export function connect(domicile: Domicile): () => void {
   }
   const read = (listed: boolean) => {
     tile()
+    // Windows CWM does not draw (1px helpers) must be reported as hidden: otherwise
+    // the client draws unthrottled and the engine never releases its buffers,
+    // which filled 32 GB of GPU memory in minutes (Zotero's 1x1 helper).
+    for (const w of domicile.windows.list ?? [])
+      if (isToplevel(w) && isHelper(w) && !hidden.has(w.appId)) {
+        hidden.add(w.appId)
+        domicile.windows.setBounds(w.appId, { x: 0, y: 0, width: 0, height: 0 })
+      }
     const windows = domicile.windows.list ?? null
     const floating = windows?.filter(isFloating).map((w) => w.appId) ?? []
     const before = new Set(useDesktop.getState().windows?.filter(isFloating).map((w) => w.appId))
