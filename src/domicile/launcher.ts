@@ -34,6 +34,7 @@ function refresh(domicile: Domicile) {
         Err: (error) => console.warn('[cwm] could not read installed applications:', error.message),
       })
       dbusActivated = await findDbusActivated(domicile, dirs.unwrapOr([]))
+      geckoCommands = await findGecko(domicile, entries)
     } catch (e) {
       console.warn('[cwm] could not read installed applications', e)
     } finally {
@@ -73,8 +74,32 @@ async function findDbusActivated(domicile: Domicile, dirs: readonly string[]): P
  * such as its notifications don't reach it.
  */
 function commandFor(e: DesktopEntry): string[] {
-  const argv = withX11(e.command)
+  const argv = withX11(e.command, geckoCommands.has(e.command[0] ?? ''))
   return isNested() !== false && dbusActivated.has(e.id) ? ['dbus-run-session', '--', ...argv] : argv
+}
+
+/**
+ * Commands of Gecko apps (Zotero, Firefox, Thunderbird, any fork), told by the
+ * `libxul.so` their package ships rather than by name: they go to the X11
+ * bridge (`withX11`), since drawing natively on Wayland inside Domicile they
+ * made GPU memory run away.
+ */
+let geckoCommands = new Set<string>()
+async function findGecko(domicile: Domicile, apps: readonly DesktopEntry[]): Promise<Set<string>> {
+  const commands = [...new Set(apps.map((a) => a.command[0]).filter((c): c is string => !!c))]
+  const found = await domicile.processes.run([
+    'sh',
+    '-c',
+    'for c in "$@"; do p=$(command -v "$c") || continue; p=$(readlink -f "$p"); ' +
+      'case "$p" in */bin/*) r=${p%/bin/*};; *) continue;; esac; ' +
+      '[ -n "$(find -L "$r" -maxdepth 4 -name libxul.so -print -quit 2>/dev/null)" ] && printf "%s\\n" "$c"; done; true',
+    'sh',
+    ...commands,
+  ])
+  return found.match({
+    Ok: (ran) => new Set(ran.stdout.split('\n').filter(Boolean)),
+    Err: () => new Set<string>(),
+  })
 }
 
 export const appEntries = () => entries
