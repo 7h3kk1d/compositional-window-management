@@ -38,6 +38,14 @@ export async function setupX11(domicile: Domicile) {
   display = X_DISPLAY
 }
 
-/** `argv` with the X display the desktop's X11 apps use, if the shell runs one. */
+/**
+ * `argv` with the X display the desktop's X11 apps use, if the shell runs one.
+ *
+ * Gecko apps (Zotero, Firefox, Thunderbird) also go to X11 (`MOZ_ENABLE_WAYLAND=0`):
+ * drawing natively on Wayland inside Domicile, Zotero made GPU memory run away
+ * at ~600 MB/s within 20-90 s (a Domicile bug: the engine keeps the buffers),
+ * taking the whole system out of memory; through the bridge it stays flat.
+ * The cost is X11's 1x rendering, scaled up on a HiDPI screen.
+ */
 export const withX11 = (argv: readonly string[]): string[] =>
-  display === undefined ? [...argv] : ['env', `DISPLAY=${display}`, ...argv]
+  display === undefined ? [...argv] : ['env', `DISPLAY=${display}`, 'MOZ_ENABLE_WAYLAND=0', ...argv]
