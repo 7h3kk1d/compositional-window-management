@@ -39,13 +39,22 @@ export async function setupX11(domicile: Domicile) {
 }
 
 /**
- * `argv` with the X display the desktop's X11 apps use, if the shell runs one.
- *
- * Gecko apps (Zotero, Firefox, Thunderbird) also go to X11 (`MOZ_ENABLE_WAYLAND=0`):
- * drawing natively on Wayland inside Domicile, Zotero made GPU memory run away
+ * Gecko apps (Zotero, Firefox, Thunderbird and their forks), by command name.
+ * Drawing natively on Wayland inside Domicile, Zotero made GPU memory run away
  * at ~600 MB/s within 20-90 s (a Domicile bug: the engine keeps the buffers),
- * taking the whole system out of memory; through the bridge it stays flat.
- * The cost is X11's 1x rendering, scaled up on a HiDPI screen.
+ * taking the whole system out of memory; through the X11 bridge it stays flat.
  */
-export const withX11 = (argv: readonly string[]): string[] =>
-  display === undefined ? [...argv] : ['env', `DISPLAY=${display}`, 'MOZ_ENABLE_WAYLAND=0', ...argv]
+const GECKO = /^(zotero|firefox|firefox-esr|firefox-devedition|thunderbird|librewolf|floorp|waterfox|zen|zen-browser)$/
+
+/**
+ * `argv` with the X display the desktop's X11 apps use, if the shell runs one.
+ * Gecko apps are sent to X11 outright: `GDK_BACKEND=x11`, since packages such
+ * as nixpkgs' Zotero export `MOZ_ENABLE_WAYLAND=1` in their own wrapper. The
+ * cost is X11's 1x rendering, scaled up on a HiDPI screen.
+ */
+export const withX11 = (argv: readonly string[]): string[] => {
+  if (display === undefined) return [...argv]
+  const name = (argv[0] ?? '').split('/').pop() ?? ''
+  const gecko = GECKO.test(name) ? ['MOZ_ENABLE_WAYLAND=0', 'GDK_BACKEND=x11'] : []
+  return ['env', `DISPLAY=${display}`, ...gecko, ...argv]
+}
