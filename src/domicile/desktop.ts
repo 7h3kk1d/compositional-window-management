@@ -292,7 +292,7 @@ function grantFocus(domicile: Domicile, appId: string) {
 
 export function connect(domicile: Domicile): () => void {
   const tiled = new Set<string>()
-  const hidden = new Set<string>()
+  const stopBounds = reportBounds(domicile)
   const tile = () => {
     for (const w of domicile.windows.list ?? [])
       if (isTiled(w) && !tiled.has(w.appId)) {
@@ -302,14 +302,6 @@ export function connect(domicile: Domicile): () => void {
   }
   const read = (listed: boolean) => {
     tile()
-    // Windows CWM does not draw (1px helpers) must be reported as hidden: otherwise
-    // the client draws unthrottled and the engine never releases its buffers,
-    // which filled 32 GB of GPU memory in minutes (Zotero's 1x1 helper).
-    for (const w of domicile.windows.list ?? [])
-      if (isToplevel(w) && isHelper(w) && !hidden.has(w.appId)) {
-        hidden.add(w.appId)
-        domicile.windows.setBounds(w.appId, { x: 0, y: 0, width: 0, height: 0 })
-      }
     const windows = domicile.windows.list ?? null
     const floating = windows?.filter(isFloating).map((w) => w.appId) ?? []
     const before = new Set(useDesktop.getState().windows?.filter(isFloating).map((w) => w.appId))
@@ -365,10 +357,52 @@ export function connect(domicile: Domicile): () => void {
       if (s.focus !== prev.focus) pushFocus()
     }),
   ]
+  offs.push(stopBounds)
   return () => offs.forEach((off) => off())
 }
 
 /** Closing an app pane closes the window; the pane goes when the compositor says it's gone. */
 export function closeApp(appId: string) {
   useDesktop.getState().domicile?.windows.close(appId)
+}
+
+/**
+ * Tells the compositor where each window is drawn, as Domicile asks of a
+ * shell: the `<app>`'s box in page pixels (the client draws at that monitor's
+ * scale), or an empty box for a window the page does not draw (a 1px helper,
+ * a pane in a tab not shown, a popup of either). A window left unreported
+ * draws unthrottled, and the engine held every buffer it drew: Zotero's hidden
+ * helper filled 32 GB of GPU memory in minutes. Reported empty, a client is
+ * suspended and gets one frame callback a second until it has a box again.
+ */
+function reportBounds(domicile: Domicile): () => void {
+  const sent = new Map<string, string>()
+  const tick = () => {
+    const live = new Set<string>()
+    for (const w of domicile.windows.list ?? []) {
+      live.add(w.appId)
+      // The first drawn, visible `<app>` for the window (a mirror shows a crop of the same client).
+      let box = { x: 0, y: 0, width: 0, height: 0 }
+      for (const el of document.querySelectorAll<HTMLElement>(`app[app-id="${CSS.escape(w.appId)}"]`)) {
+        const r = el.getBoundingClientRect()
+        if (r.width >= 1 && r.height >= 1 && el.checkVisibility()) {
+          box = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }
+          break
+        }
+      }
+      const key = `${box.x},${box.y},${box.width},${box.height}`
+      if (sent.get(w.appId) !== key) {
+        sent.set(w.appId, key)
+        domicile.windows.setBounds(w.appId, box)
+      }
+    }
+    for (const id of sent.keys()) if (!live.has(id)) sent.delete(id)
+  }
+  tick()
+  const timer = setInterval(tick, 500)
+  const off = domicile.windows.on('change', tick)
+  return () => {
+    clearInterval(timer)
+    off()
+  }
 }

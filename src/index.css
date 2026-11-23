@@ -1643,8 +1643,17 @@ button.toggle.on {
   transform-origin: 0 0;
   z-index: 1000;
 }
+/* The wrappers only position popups: clicks go to the popup windows themselves,
+   or through to the window beneath (a Gecko content child sets none on its <app>). */
+.app-popups,
+.app-popup {
+  pointer-events: none;
+}
 .app-popup {
   position: absolute;
+}
+.app-popup > app {
+  pointer-events: auto;
 }
 .app-missing {
   display: grid;
